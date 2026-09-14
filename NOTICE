@@ -1,0 +1,23 @@
+nagisa-rs
+
+The Rust implementation is licensed under the Apache License, Version 2.0.
+
+This is a port of word-segmentation and POS inference from nagisa 0.2.11,
+originally implemented in Python/Cython using DyNet by Taishi Ikeda
+(taishi-i) and contributors:
+https://github.com/taishi-i/nagisa
+https://pypi.org/project/nagisa/0.2.11/
+Copyright (c) 2018 taishi-i
+The upstream MIT license is reproduced in licenses/nagisa-MIT.txt.
+The pretrained dictionary and model are supplied separately by nagisa;
+they are not bundled in this repository or the Rust package.
+
+Unicode normalization and casing tables were generated from CPython
+3.12.14 (Unicode 15.0.0). The Unicode data license is reproduced in
+licenses/Unicode-3.0.txt.
+
+The candidate POS feature ordering follows CPython 3.12.14's small-integer
+set insertion, resizing and deletion behavior (Objects/setobject.c).
+CPython is maintained by the Python Software Foundation and contributors:
+https://github.com/python/cpython/tree/v3.12.14
+Its license is reproduced in licenses/Python-2.0.txt.

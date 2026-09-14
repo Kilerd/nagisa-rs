@@ -1,0 +1,30 @@
+[package]
+name = "nagisa-rs"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+description = "Pure Rust Japanese word segmentation and POS tagging using nagisa's pretrained model"
+repository = "https://github.com/Kilerd/nagisa-rs"
+readme = "README.md"
+keywords = ["japanese", "tokenizer", "nagisa", "nlp", "segmentation"]
+categories = ["text-processing"]
+include = ["/src", "/tests", "/examples", "/tools/*.py", "/tools/*.txt", "/docs", "/build.rs", "/Cargo.lock", "/README.md", "/LICENSE", "/NOTICE", "/licenses"]
+
+[lints.rust]
+unsafe_code = "forbid"
+
+[lints.clippy]
+all = "deny"
+
+[dependencies]
+thiserror = "2"
+flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
+
+[dev-dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[profile.release]
+debug = 1
+lto = "thin"
+codegen-units = 4

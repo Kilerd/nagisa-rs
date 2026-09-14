@@ -1,0 +1,55 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.97.1
+        with:
+          components: rustfmt, clippy
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: cargo fmt --all -- --check
+      - run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Tests without external model data
+        run: cargo test --release --locked
+      - name: Fetch the original model (no nagisa installation required)
+        run: python tools/download_model.py
+      - name: Check pinned Unicode data
+        run: python tools/unicode.py --check --references results/unicode
+      - name: Test the standalone model and Unicode audit
+        env:
+          NAGISA_RS_MODEL_DIR: models/nagisa-0.2.11
+          NAGISA_RS_UNICODE_REF: results/unicode/singles.tsv
+        run: cargo test --release --locked
+      - name: Install the Python reference
+        run: python -m pip install -r tools/requirements-reference.txt
+      - name: Regenerate reference words and POS tags using Python
+        run: python tools/reference.py tests/fixtures/ja_parity_subset.jsonl results/reference.jsonl
+      - name: Test against the fresh Python reference
+        env:
+          NAGISA_RS_MODEL_DIR: models/nagisa-0.2.11
+          NAGISA_RS_FIXTURES: results/reference.jsonl
+        run: cargo test --release --locked --test parity --test tagging
+      - name: Verify candidate features and pre-tokenized POS references
+        run: |
+          python tools/pos_reference.py results/pos
+          cmp tests/fixtures/pos_candidates.json results/pos/pos_candidates.json
+          cmp tests/fixtures/pos_tokens.json results/pos/pos_tokens.json
+      - name: Verify distributable crate
+        run: cargo package --locked
