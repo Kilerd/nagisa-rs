@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Generate nagisa 0.2.11 references for casing, dictionaries and POS selection."""
+"""Generate nagisa 0.3.0 references for casing, dictionaries and POS selection."""
 import argparse
 import json
 from pathlib import Path
@@ -29,8 +29,8 @@ def main():
     if (sys.implementation.name, sys.version_info[:2], unicodedata.unidata_version) != ("cpython", (3, 12), "15.0.0"):
         raise SystemExit("use CPython 3.12 / Unicode 15.0.0")
     import nagisa
-    if nagisa.__version__ != "0.2.11":
-        raise SystemExit("expected nagisa 0.2.11")
+    if nagisa.__version__ != "0.3.0":
+        raise SystemExit("expected nagisa 0.3.0")
 
     texts = [json.loads(line)["text"] for line in
              (ROOT / "tests/fixtures/ja_parity_subset.jsonl").read_text(encoding="utf-8").split("\n") if line.strip()]

@@ -374,20 +374,28 @@ fn viterbi(trans: &[[f64; DIM_OUT]; DIM_OUT], obs: &[[f64; DIM_OUT]]) -> Vec<usi
     path
 }
 
-/// `utils.segmenter_for_bmes`: 0=B, 1=M, 2=E, 3=S. A trailing B/M run is
-/// dropped, exactly as nagisa drops it.
+/// `utils.segmenter_for_bmes`: 0=B, 1=M, 2=E, 3=S. Since nagisa 0.2.12,
+/// incomplete words are flushed before S and at the end instead of being lost.
 fn segment(chars: &[char], tags: &[usize]) -> Vec<String> {
     let mut words = Vec::new();
     let mut partial = String::new();
     for (&ch, &tag) in chars.iter().zip(tags) {
         match tag {
-            3 => words.push(ch.to_string()),
+            3 => {
+                if !partial.is_empty() {
+                    words.push(std::mem::take(&mut partial));
+                }
+                words.push(ch.to_string());
+            }
             2 => {
                 partial.push(ch);
                 words.push(std::mem::take(&mut partial));
             }
             _ => partial.push(ch),
         }
+    }
+    if !partial.is_empty() {
+        words.push(partial);
     }
     words
 }
@@ -418,4 +426,31 @@ pub(crate) fn wakati(
     let mut tags = viterbi(&w.trans, &obs);
     dictionary.apply(chars, &mut tags);
     segment(if lower_output { &lowered } else { chars }, &tags)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde::Deserialize;
+
+    #[test]
+    fn bmes_preserves_incomplete_words_like_nagisa_030() {
+        #[derive(Deserialize)]
+        struct Case {
+            text: String,
+            tags: Vec<usize>,
+            words: Vec<String>,
+        }
+        #[derive(Deserialize)]
+        struct Reference {
+            bmes: Vec<Case>,
+        }
+        let reference: Reference =
+            serde_json::from_str(include_str!("../tests/fixtures/compat_030.json")).unwrap();
+        for case in reference.bmes {
+            let words = segment(&case.text.chars().collect::<Vec<_>>(), &case.tags);
+            assert_eq!(words, case.words, "{}: {:?}", case.text, case.tags);
+            assert_eq!(words.concat(), case.text);
+        }
+    }
 }

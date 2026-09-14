@@ -1,7 +1,7 @@
 //! Differential test against `nagisa.tagging(text).words`.
 //!
 //! Fixtures are JSON lines of `{"cat": ..., "text": ..., "words": [...]}`
-//! produced by `tools/reference.py` with nagisa 0.2.11 itself.
+//! produced by `tools/reference.py` with nagisa 0.3.0 itself.
 //!
 //! Environment:
 //! * `RAGISA_MODEL_DIR` -- nagisa's `data/` directory (the one that

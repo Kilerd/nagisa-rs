@@ -66,6 +66,8 @@ def main():
     assert_eq!(tagger.extract(text, &[Noun]).words, ["Python", "ツール"]);
     assert_eq!(Noun.as_str(), "名詞");
     assert_eq!("助詞".parse::<ragisa::PosTag>().unwrap(), Particle);
+    assert_eq!(ragisa::STOPWORDS.len(), 135);
+    assert!(ragisa::STOPWORDS.contains(&"です"));
     let tagger = tagger.with_single_word_list(["東京大学"]);
     assert_eq!(tagger.words("東京大学"), ["東京大学"]);
     assert_eq!(tagger.words_with_options("Python", ragisa::TextOptions { lower: true }), ["python"]);

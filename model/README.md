@@ -1,7 +1,7 @@
 # ragisa-model
 
 Pretrained weights for [ragisa](https://github.com/Kilerd/ragisa), from
-[nagisa 0.2.11](https://github.com/taishi-i/nagisa/tree/0.2.11) by Taishi Ikeda
+[nagisa 0.3.0](https://github.com/taishi-i/nagisa/tree/0.3.0) by Taishi Ikeda
 and contributors. The original model and this data package are MIT licensed;
 see [LICENSE](LICENSE).
 

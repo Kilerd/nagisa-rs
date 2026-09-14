@@ -10,7 +10,7 @@ pub struct TaggedText {
     pub postags: Vec<PosTag>,
 }
 
-/// Japanese segmentation and POS tagging with nagisa 0.2.11's original model.
+/// Japanese segmentation and POS tagging with nagisa 0.3.0's original model.
 ///
 /// Immutable, `Send + Sync`, and reentrant. Use [`JaSegmenter`] if only words
 /// are needed; it does not retain the POS dictionary or network parameters.
@@ -274,7 +274,7 @@ fn validate_pos_labels(labels: &crate::hash::FxMap<String, u32>) -> Result<(), J
             .any(|(id, tag)| labels.get(tag.as_str()) != Some(&(id as u32)))
     {
         return Err(JaError::InvalidVocab(
-            "expected nagisa 0.2.11's 24 POS labels in original ID order",
+            "expected nagisa 0.3.0's 24 POS labels in original ID order",
         ));
     }
     Ok(())

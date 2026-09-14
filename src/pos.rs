@@ -1,4 +1,4 @@
-//! nagisa 0.2.11 POS inference: word/character/tag features → BiLSTM → softmax.
+//! nagisa 0.3.0 POS inference: word/character/tag features → BiLSTM → softmax.
 use crate::infer::{DIM_UNI, DIM_WORD, Lstm, Vocab, Weights, gemv_acc, sigmoid};
 
 pub(crate) const N_TAGS: usize = crate::PosTag::ALL.len();
@@ -137,6 +137,9 @@ pub(crate) fn infer(
     words: &[String],
 ) -> Vec<usize> {
     let mut inputs = Vec::with_capacity(words.len() * INPUT);
+    // nagisa 0.3.0 computes each distinct character-ID sequence only once
+    // per call. Keep the cache local so shared taggers remain reentrant.
+    let mut char_vectors = crate::hash::FxMap::default();
     for word in words {
         // POS features preserve the token's case; only segmentation uses lower().
         let wid = *vocab.word2id.get(word).unwrap_or(&vocab.word_oov) as usize;
@@ -145,23 +148,32 @@ pub(crate) fn infer(
         } else {
             inputs.extend_from_slice(&shared.word[wid * DIM_WORD..(wid + 1) * DIM_WORD]);
         }
-        let mut chars = Vec::with_capacity(word.chars().count() * DIM_UNI);
-        for ch in word.chars() {
-            let id = *vocab.uni2id.get(&ch.to_string()).unwrap_or(&vocab.uni_oov) as usize;
-            chars.extend_from_slice(&shared.uni[id * DIM_UNI..(id + 1) * DIM_UNI]);
-        }
-        let forward = run(&pos.char_fwd, &chars, DIM_UNI, CHAR_HIDDEN, false);
-        // transduce(chars)[-1] means the last ORIGINAL position. Its backward
-        // half has consumed just the final character, not the whole word.
-        let backward = run(
-            &pos.char_bwd,
-            &chars[chars.len() - DIM_UNI..],
-            DIM_UNI,
-            CHAR_HIDDEN,
-            true,
-        );
-        inputs.extend_from_slice(&forward[forward.len() - CHAR_HIDDEN..]);
-        inputs.extend_from_slice(&backward);
+        let char_ids: Vec<_> = word
+            .chars()
+            .map(|ch| *vocab.uni2id.get(&ch.to_string()).unwrap_or(&vocab.uni_oov))
+            .collect();
+        let char_vec = char_vectors.entry(char_ids).or_insert_with_key(|ids| {
+            let mut chars = Vec::with_capacity(ids.len() * DIM_UNI);
+            for &id in ids {
+                let id = id as usize;
+                chars.extend_from_slice(&shared.uni[id * DIM_UNI..(id + 1) * DIM_UNI]);
+            }
+            let forward = run(&pos.char_fwd, &chars, DIM_UNI, CHAR_HIDDEN, false);
+            // transduce(chars)[-1] means the last ORIGINAL position. Its backward
+            // half has consumed just the final character, not the whole word.
+            let backward = run(
+                &pos.char_bwd,
+                &chars[chars.len() - DIM_UNI..],
+                DIM_UNI,
+                CHAR_HIDDEN,
+                true,
+            );
+            let mut vector = [0.0; DIM_UNI];
+            vector[..CHAR_HIDDEN].copy_from_slice(&forward[forward.len() - CHAR_HIDDEN..]);
+            vector[CHAR_HIDDEN..].copy_from_slice(&backward);
+            vector
+        });
+        inputs.extend_from_slice(char_vec);
         let ids = dictionary.get(word).map_or(&[0][..], Vec::as_slice);
         let mut tags = [0.0; DIM_TAG];
         for id in candidate_tags(ids, is_alnum(word)) {

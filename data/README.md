@@ -1,9 +1,11 @@
 # Bundled pretrained data
 
 The dictionary and all model parameters originate from
-[nagisa 0.2.11](https://github.com/taishi-i/nagisa/tree/0.2.11), by Taishi Ikeda
+[nagisa 0.3.0](https://github.com/taishi-i/nagisa/tree/0.3.0), by Taishi Ikeda
 and contributors. They are redistributed under the upstream
 [MIT license](../licenses/nagisa-MIT.txt), also included in the model package.
+The original dictionary and model bytes are unchanged from nagisa 0.2.11;
+the pinned 0.3.0 source archive verifies the same SHA-256 hashes.
 
 - `nagisa_v001.dict` is the unmodified upstream gzip/pickle dictionary.
 - `../model/data/nagisa_v001.bin.gz` contains every original f32 parameter,
@@ -23,7 +25,7 @@ python3 tools/download_model.py
 python3 tools/bundle_model.py --check
 # To rewrite from the same checksum-pinned source:
 python3 tools/bundle_model.py
-RAGISA_MODEL_DIR="$PWD/models/nagisa-0.2.11" cargo test --release --locked
+RAGISA_MODEL_DIR="$PWD/models/nagisa-0.3.0" cargo test --release --locked
 ```
 
 The checker compares the dictionary byte-for-byte and every binary model

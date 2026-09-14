@@ -1,6 +1,6 @@
 {
-  "upstream": "https://github.com/taishi-i/nagisa/tree/0.2.11",
-  "version": "0.2.11",
+  "upstream": "https://github.com/taishi-i/nagisa/tree/0.3.0",
+  "version": "0.3.0",
   "license": "MIT",
   "source_sha256": {
     "nagisa_v001.dict": "968ac9e6c7a53051ef24d8561673dd31de81b2feb9b5bff01b1d3b6b2473113c",

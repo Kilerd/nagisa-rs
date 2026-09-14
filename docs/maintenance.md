@@ -96,7 +96,7 @@ cargo test --release --locked
 The scalar audit checks all **1,112,064 Unicode scalar values** (surrogates
 excluded). The sequence audit checks **1,112,064 × 85** (scalar, composing
 mark) pairs and **922 × 922** combining-mark orderings. Reference generation
-can take a few minutes. The full current suite contains seventeen unit tests, eleven integration tests and
+can take a few minutes. The full current suite contains nineteen unit tests, eleven integration tests and
 two documentation tests. Both `JaSegmenter` and `Tagger` have model parity
 and 8-thread reentrancy coverage.
 
@@ -111,6 +111,8 @@ normalizes supplied words, preserves single-space tokens, and returns an
 `EmptyToken` error for empty normalized words. By default POS features use
 the original case of each token, independently of segmentation's lowercase
 features. `TextOptions { lower: true }` also lowercases POS input tokens.
+Character vectors are cached per call by character-ID sequence, matching
+nagisa 0.3.0: repeated words reuse the same vector, with no global mutable state.
 
 POS outputs and selection inputs use `PosTag`. Its 24 variants correspond
 one-to-one to the original model's numeric IDs; model loading validates the
@@ -152,9 +154,9 @@ RAGISA_FIXTURES="$PWD/results/tagging.jsonl" \
 
 Unset `RAGISA_MODEL_DIR` to check the bundled model, or set it to compare
 the original-file loader. Candidate-feature and pre-tokenized POS
-fixtures are committed and regenerated in CI. The 1,713 text fixtures now
-contain both `words` and `postags`; the original inputs and word outputs
-are preserved. Full POS inference, like segmentation, runs without Python
+fixtures are committed and regenerated in CI. The 1,717 text fixtures
+contain both `words` and `postags`, regenerated against nagisa 0.3.0,
+including four upstream decoder regressions. Full POS inference runs without Python
 or native numerical libraries.
 
 ## Casing and dictionary behavior
@@ -169,7 +171,7 @@ non-overlapping matches on the normalized text with its original casing.
 It forces BMES tags and repairs adjacent boundaries before words are cut.
 The dictionary builder replaces existing entries and inference only reads
 the trie. Regex syntax is not interpreted and empty normalized entries are
-ignored; these deliberate differences from nagisa 0.2.11 are documented
+ignored; these deliberate differences from nagisa 0.3.0 are documented
 in the README. Filtering and extraction run POS inference on the full
 sentence before selecting word/tag pairs.
 
@@ -206,8 +208,9 @@ container results. Affinity does not reserve a physical core; shared-host
 contention can still affect timing. Keep infrastructure identifiers out of
 public reports.
 
-The 2026-09-14 reports are pinned to revision `0b0be7b`, before the typed POS
-API. Keep their source hashes intact; rerun the tool to measure later code.
+Historical nagisa 0.2.11 reports retain their original source hashes. New
+reports explicitly identify the 0.3.0 NumPy/Cython backend and current Rust
+sources; do not present the older timings as measurements of later code.
 
 Loading and inference have different scopes. Python imports the full
 upstream package/model; Rust initializes a `JaSegmenter` or `Tagger` from

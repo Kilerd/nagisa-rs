@@ -1,6 +1,6 @@
 use std::{fmt, str::FromStr};
 
-/// A part-of-speech label from nagisa 0.2.11's original 24-label model.
+/// A part-of-speech label from nagisa 0.3.0's original 24-label model.
 ///
 /// Use variants for matching and POS selection. [`Self::as_str`] and
 /// [`Display`](fmt::Display) return the original Japanese label (or `oov` /

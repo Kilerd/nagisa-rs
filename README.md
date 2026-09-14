@@ -8,14 +8,14 @@ model come from that upstream project. The checklist below tracks which
 upstream features are available here.
 
 The compatibility target is the default word and POS output of `nagisa.tagging(text)` from
-[nagisa 0.2.11](https://pypi.org/project/nagisa/0.2.11/), running under CPython
+[nagisa 0.3.0](https://pypi.org/project/nagisa/0.3.0/), running under CPython
 3.12 (Unicode 15.0.0). The pretrained model is **bundled by default**: no
 separate model download, model path, Python, DyNet, BLAS, GPU, or native
 inference library is needed at runtime.
 
 ## Upstream feature checklist
 
-Checked items are implemented and tested against **nagisa 0.2.11 / CPython
+Checked items are implemented and tested against **nagisa 0.3.0 / CPython
 3.12**. Unchecked items are not yet implemented; this is not a claim of full
 API compatibility with every nagisa release.
 
@@ -42,9 +42,11 @@ API compatibility with every nagisa release.
   `nagisa.filter(..., filter_postags=...)`.
 - [x] **Extract by POS** — `Tagger::extract()` targets
   `nagisa.extract(..., extract_postags=...)`.
+- [x] **Stopword list** — `STOPWORDS` contains all 135 entries from `nagisa.stopwords`,
+  in upstream order. Stopword removal is opt-in.
 - [ ] **Model training** — `nagisa.fit(...)` and training-data workflows.
 - [ ] **Custom trained models and hyperparameters** — custom `vocabs`, `params`
-  and `hp` configurations; only the original 0.2.11 architecture is supported.
+  and `hp` configurations; only the original 0.3.0 architecture is supported.
 
 Both Rust types are immutable, `Send + Sync`, and reentrant. Load once and
 share between threads. `JaSegmenter` retains only segmentation data; `Tagger`
@@ -143,9 +145,9 @@ ragisa = { git = "https://github.com/Kilerd/ragisa", default-features = false }
 
 `python3 tools/download_model.py` is an optional maintainer/reference helper
 that verifies the pinned source archive's SHA-256 and extracts the original
-files to `models/nagisa-0.2.11/`. Only `nagisa_v001.dict` and
+files to `models/nagisa-0.3.0/`. Only `nagisa_v001.dict` and
 `nagisa_v001.model` are needed by the external loaders. Model dimensions are
-fixed to nagisa 0.2.11's shipped architecture; `.hp` is not read. Passing a
+fixed to nagisa 0.3.0's shipped architecture; `.hp` is not read. Passing a
 data-directory argument to either CLI example selects the external loader.
 
 ### Casing, user dictionaries and POS selection
@@ -182,14 +184,31 @@ Both types support the consuming `with_single_word_list()` builder; calling
 it again replaces the dictionary. Matching is case-sensitive on normalized
 text, before optional lowercasing, and takes the longest non-overlapping
 match at each position from left to right. Entries of at most one character
-before normalization are ignored, as in nagisa 0.2.11.
+before normalization are ignored, as in nagisa 0.3.0.
 
 **Dictionary compatibility:** Rust treats every entry literally, including
-regex metacharacters such as `+`, `.`, `[` and `|`. Upstream 0.2.11 only
+regex metacharacters such as `+`, `.`, `[` and `|`. Upstream 0.3.0 only
 escapes parentheses before building a regex, so those metacharacters can
 behave differently. Rust also ignores entries that normalize to empty text.
 The dictionary parity fixtures cover literal entries, normalization,
 overlaps, boundaries, casing, and combinations with POS selection.
+
+### Stopwords
+
+`STOPWORDS` is the original 135-entry list from `nagisa.stopwords`. For example:
+
+```rust
+use ragisa::{JaSegmenter, STOPWORDS};
+
+fn main() -> Result<(), ragisa::JaError> {
+    let mut words = JaSegmenter::new()?.words("このツールはPythonで使えます。");
+    words.retain(|word| !STOPWORDS.contains(&word.as_str()));
+    Ok(())
+}
+```
+
+See [nagisa 0.3.0 compatibility and implementation changes](docs/nagisa-0.3.0.md)
+for the upstream decoder fix, backend changes and verified feature coverage.
 
 Training and arbitrary custom models remain unimplemented. Training needs
 backpropagation, optimizers and data workflows; custom configurations need
@@ -200,12 +219,11 @@ architecture.
 
 Measured on **2026-09-14** with the default bundled model, Rust **1.97.1**
 using the repository's release profile and no extra `RUSTFLAGS`, CPython
-**3.12.14**, nagisa **0.2.11**, DyNet38 **2.2**, and NumPy **2.5.3**.
+**3.12.14**, nagisa **0.3.0**, DyNet38 **2.2**, and NumPy **2.5.3**.
 Both platforms used identical implementation, benchmark and model hashes.
-Speedup compares Python and Rust on the same CPU.
-These reports measure revision
-[`0b0be7b`](https://github.com/Kilerd/ragisa/commit/0b0be7b7f40372977c1091d406d81af014ac0e30),
-before the `PosTag` API change; the raw source hashes identify that snapshot.
+Speedup compares Python and Rust on the same CPU. Python workers explicitly
+verify the **NumPy/Cython backend** and record that DyNet was not imported;
+DyNet38 is installed because upstream still declares it as a dependency.
 
 ### Apple M4
 
@@ -213,14 +231,14 @@ before the `PosTag` API change; the raw source hashes identify that snapshot.
 
 | Task | Characters | Python median / p95 (µs) | Rust median / p95 (µs) | Median speedup |
 |---|---:|---:|---:|---:|
-| Words | 20 | 363.7 / 429.4 | 89.7 / 174.2 | **4.06×** |
-| Words | 100 | 1779.4 / 1937.4 | 455.9 / 522.4 | **3.90×** |
-| Words | 400 | 7272.8 / 8137.9 | 1788.4 / 1920.5 | **4.07×** |
-| Words + POS | 20 | 556.0 / 666.6 | 159.8 / 198.4 | **3.48×** |
-| Words + POS | 100 | 2615.7 / 3023.4 | 755.8 / 862.2 | **3.46×** |
-| Words + POS | 400 | 10619.4 / 12242.8 | 2948.1 / 3213.4 | **3.60×** |
+| Words | 20 | 139.7 / 159.1 | 88.9 / 105.7 | **1.57×** |
+| Words | 100 | 685.8 / 732.7 | 449.3 / 493.8 | **1.53×** |
+| Words | 400 | 2724.9 / 2920.7 | 1772.2 / 1854.3 | **1.54×** |
+| Words + POS | 20 | 220.5 / 233.7 | 152.0 / 163.9 | **1.45×** |
+| Words + POS | 100 | 961.7 / 1020.0 | 690.7 / 743.6 | **1.39×** |
+| Words + POS | 400 | 3678.8 / 3810.5 | 2640.7 / 2784.2 | **1.39×** |
 
-Raw inputs, samples, versions and hashes: [words](docs/benchmarks/apple-m4-words-2026-09-14.json), [words + POS](docs/benchmarks/apple-m4-tagging-2026-09-14.json).
+Raw inputs, samples, versions and hashes: [words](docs/benchmarks/apple-m4-words-nagisa-0.3.0-2026-09-14.json), [words + POS](docs/benchmarks/apple-m4-tagging-nagisa-0.3.0-2026-09-14.json).
 
 ### AMD EPYC 9V74
 
@@ -231,14 +249,14 @@ throttling occurred during either measurement (both `nr_throttled` and
 
 | Task | Characters | Python median / p95 (µs) | Rust median / p95 (µs) | Median speedup |
 |---|---:|---:|---:|---:|
-| Words | 20 | 1125.9 / 1157.9 | 231.6 / 238.9 | **4.86×** |
-| Words | 100 | 5504.1 / 5579.6 | 1171.1 / 1192.9 | **4.70×** |
-| Words | 400 | 22072.5 / 23339.1 | 4688.9 / 4756.2 | **4.71×** |
-| Words + POS | 20 | 1576.9 / 1609.1 | 404.4 / 412.5 | **3.90×** |
-| Words + POS | 100 | 7489.7 / 7589.8 | 1962.6 / 1989.5 | **3.82×** |
-| Words + POS | 400 | 29779.1 / 30108.5 | 7748.4 / 7801.5 | **3.84×** |
+| Words | 20 | 233.6 / 244.0 | 231.3 / 239.0 | **1.01×** |
+| Words | 100 | 1154.7 / 1224.3 | 1169.0 / 1197.4 | **0.99×** |
+| Words | 400 | 5904.4 / 5974.7 | 4684.2 / 4739.4 | **1.26×** |
+| Words + POS | 20 | 421.6 / 437.8 | 394.1 / 401.7 | **1.07×** |
+| Words + POS | 100 | 1888.8 / 1960.2 | 1796.2 / 1827.4 | **1.05×** |
+| Words + POS | 400 | 8288.5 / 8483.4 | 6952.1 / 7025.8 | **1.19×** |
 
-Raw inputs, samples, versions and hashes: [words](docs/benchmarks/amd-epyc-9v74-words-2026-09-14.json), [words + POS](docs/benchmarks/amd-epyc-9v74-tagging-2026-09-14.json).
+Raw inputs, samples, versions and hashes: [words](docs/benchmarks/amd-epyc-9v74-words-nagisa-0.3.0-2026-09-14.json), [words + POS](docs/benchmarks/amd-epyc-9v74-tagging-nagisa-0.3.0-2026-09-14.json).
 
 ### Method and reproduction
 
@@ -250,12 +268,15 @@ processes, 10 warmup calls and 400 timed calls per length per run
 (**2,400 samples per cell**). Native thread-count environment variables are
 set to one. Tables report pooled median and p95 latency; speedup is Python
 median / Rust median. All compared word and POS outputs matched.
+A speedup below 1 means the Python median was lower.
 
 Word segmentation times `JaSegmenter::words(text)` against
 `nagisa.tagging(text).words`. Python's `.words` property lazily performs
 segmentation, so neither side computes POS tags in this mode. Words + POS
 times `Tagger::tagging(text)` against creating a fresh `nagisa.tagging(text)`
-result and reading **both** `.words` and `.postags`.
+result and reading **both** `.words` and `.postags`. Rust returns typed
+`PosTag` values; conversion to original labels for validation and JSON occurs
+outside the timed region.
 
 Timings include preprocessing and output construction, but exclude model
 loading, process startup, JSON I/O and destruction of the returned results.
@@ -277,10 +298,11 @@ uv pip install --python .venv/bin/python -r tools/requirements-reference.txt
 ```
 
 `uv` is optional; a regular Python 3.12 `venv` and `pip` work too. The tool
-builds the Rust worker in release mode. Add `--external-model` to use the
-Python package's original model files, or `--cpu N` on Linux to
+builds the Rust worker in release mode. Add `--external-model` to use
+the Python package's original model files, or `--cpu N` on Linux to
 pin both workers to an allowed logical CPU. Reports record Linux affinity,
 cgroup v2 CPU/memory limits and CPU accounting before and after the runs.
+The earlier 0.2.11 reports remain in [the benchmark directory](docs/benchmarks/).
 
 ## Validation
 
@@ -297,15 +319,15 @@ are **ignored** until their reference data is supplied. Unit tests include **407
 committed preprocessing/lowercase/character-type cases and **6,402** Python
 reference cases for candidate-POS set ordering.
 
-The bundled tests cover **1,713** reference texts with both word and POS
-outputs, **1,717** lowercase cases, **196** dictionary cases, **40** POS
+The bundled tests cover **1,717** reference texts with both word and POS
+outputs, **1,721** lowercase cases, **196** dictionary cases, **40** POS
 selection cases, **20** pre-segmented casing cases, and 8-thread reentrancy.
 To check the original-file loader as well as every bundled weight's f32 bits:
 
 ```sh
 python3 tools/download_model.py
 python3 tools/bundle_model.py --check
-export RAGISA_MODEL_DIR="$PWD/models/nagisa-0.2.11"
+export RAGISA_MODEL_DIR="$PWD/models/nagisa-0.3.0"
 cargo test --release --locked
 ```
 
@@ -322,9 +344,9 @@ JSONL file or a directory of word fixtures. Each record contains `text`,
 `words`, `postags`, and an optional `cat`; `prepro_cases.jsonl` is reserved for the
 separate preprocessing test. See [fixture provenance](tests/fixtures/README.md).
 
-The current implementation was verified locally with **0 / 1,713 word
-mismatches and 0 / 1,713 POS mismatches**, including both types' 8-thread tests.
-All **30 tests** pass locally with the original model and exhaustive Unicode audit data enabled.
+The current implementation was verified locally with **0 / 1,717 word
+mismatches and 0 / 1,717 POS mismatches**, including both types' 8-thread tests.
+All **32 tests** pass locally with the original model and exhaustive Unicode audit data enabled.
 
 CI runs on Linux and macOS, tests bundled loading before any model download,
 then verifies the original data, all f32 weight bits and the Unicode tables,

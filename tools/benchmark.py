@@ -27,6 +27,9 @@ def python_worker():
     start = time.perf_counter_ns()
     import nagisa
     load_ms = (time.perf_counter_ns() - start) / 1e6
+    backend = type(nagisa.tagger._model).__module__
+    if backend != "nagisa.np_model":
+        raise SystemExit("expected nagisa 0.3.0's NumPy/Cython inference backend")
     tagging = request["mode"] == "tagging"
     measurements = []
     for text in request["texts"]:
@@ -49,7 +52,9 @@ def python_worker():
         measurements.append({"text": text, "words": tagged.words,
                              "postags": tagged.postags if tagging else [],
                              "samples_us": samples})
-    json.dump({"load_ms": load_ms, "measurements": measurements}, sys.stdout, ensure_ascii=False)
+    json.dump({"load_ms": load_ms, "backend": backend,
+               "dynet_imported": any(name.startswith(("dynet", "_dynet")) for name in sys.modules),
+               "measurements": measurements}, sys.stdout, ensure_ascii=False)
 
 
 def command(*args):
@@ -111,7 +116,7 @@ def main():
         "cpython", (3, 12), "15.0.0"
     ):
         raise SystemExit("use CPython 3.12 / Unicode 15.0.0")
-    if importlib.metadata.version("nagisa") != "0.2.11":
+    if importlib.metadata.version("nagisa") != "0.3.0":
         raise SystemExit("install tools/requirements-reference.txt first")
     # Locate package data without importing/initializing nagisa in the driver.
     model_dir = Path(importlib.metadata.distribution("nagisa").locate_file("nagisa/data"))

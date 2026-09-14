@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Rebuild/check bundled data from the checksum-pinned nagisa 0.2.11 files."""
+"""Rebuild/check bundled data from the checksum-pinned nagisa 0.3.0 files."""
 import argparse
 import gzip
 import hashlib
@@ -45,7 +45,7 @@ def pack_model(text):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("source", type=Path, nargs="?", default=ROOT / "models/nagisa-0.2.11")
+    parser.add_argument("source", type=Path, nargs="?", default=ROOT / "models/nagisa-0.3.0")
     parser.add_argument("--check", action="store_true", help="verify committed assets without writing")
     args = parser.parse_args()
     source = {name: (args.source / name).read_bytes() for name in SOURCES}
@@ -74,8 +74,8 @@ def main():
         model.write_bytes(compressed.getvalue())
         license_path.write_bytes(source["LICENSE-nagisa.txt"])
     manifest = {
-        "upstream": "https://github.com/taishi-i/nagisa/tree/0.2.11",
-        "version": "0.2.11", "license": "MIT", "source_sha256": SOURCES,
+        "upstream": "https://github.com/taishi-i/nagisa/tree/0.3.0",
+        "version": "0.3.0", "license": "MIT", "source_sha256": SOURCES,
         "format": "NAGISA-v1: original DyNet header lines followed by little-endian f32 values",
         "parameters": 28, "uncompressed_weights_sha256": digest(weights),
         "assets": {str(path.relative_to(ROOT)): {"sha256": digest(path.read_bytes()), "bytes": path.stat().st_size}

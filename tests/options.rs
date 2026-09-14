@@ -77,7 +77,7 @@ fn tagger() -> &'static Tagger {
 fn lowercase_matches_python_words_and_postags() {
     let segmenter = common::segmenter();
     let options = TextOptions { lower: true };
-    assert_eq!(references().lowercase.len(), 1717);
+    assert_eq!(references().lowercase.len(), 1721);
     for case in &references().lowercase {
         case.expected.check(
             tagger().tagging_with_options(&case.text, options),

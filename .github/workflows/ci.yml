@@ -40,7 +40,7 @@ jobs:
         run: python tools/unicode.py --check --references results/unicode
       - name: Test the standalone model and Unicode audit
         env:
-          RAGISA_MODEL_DIR: models/nagisa-0.2.11
+          RAGISA_MODEL_DIR: models/nagisa-0.3.0
           RAGISA_UNICODE_REF: results/unicode/singles.tsv
         run: cargo test --release --locked
       - name: Install the Python reference
@@ -61,6 +61,10 @@ jobs:
         run: |
           python tools/options_reference.py results/options.json
           cmp tests/fixtures/options.json results/options.json
+      - name: Verify nagisa 0.3.0 compatibility fixtures
+        run: |
+          python tools/compat_reference.py results/compat_030.json
+          cmp tests/fixtures/compat_030.json results/compat_030.json
       - name: Verify distributable crates and offline consumer
         run: |
           cargo package --workspace --locked

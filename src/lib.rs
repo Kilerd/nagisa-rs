@@ -1,4 +1,4 @@
-//! Pure-Rust Japanese word segmentation and POS tagging with nagisa 0.2.11.
+//! Pure-Rust Japanese word segmentation and POS tagging with nagisa 0.3.0.
 //! Targets `nagisa.tagging(text).words` and `.postags` under CPython 3.12.
 //!
 //! The original pretrained dictionary and lossless f32 weights are bundled
@@ -39,6 +39,7 @@ mod pos;
 mod pos_tag;
 mod pos_unicode_tables;
 mod prepro;
+mod stopwords;
 mod tagger;
 mod unicode_tables;
 
@@ -47,6 +48,7 @@ use std::path::Path;
 
 pub use error::JaError;
 pub use pos_tag::{ParsePosTagError, PosTag};
+pub use stopwords::STOPWORDS;
 pub use tagger::{TaggedText, Tagger};
 
 use infer::{
@@ -87,7 +89,7 @@ impl std::fmt::Debug for JaSegmenter {
 }
 
 impl JaSegmenter {
-    /// Load the bundled nagisa 0.2.11 model, without file or network access.
+    /// Load the bundled nagisa 0.3.0 model, without file or network access.
     /// Available with the default `bundled-model` feature. Load once and reuse.
     ///
     /// # Errors
@@ -114,7 +116,7 @@ impl JaSegmenter {
     /// # Errors
     /// Returns [`JaError`] if a file is missing or unreadable, if the pickle or
     /// the DyNet text format cannot be parsed, or if the parameters do not have
-    /// the shapes nagisa 0.2.11 uses.
+    /// the shapes nagisa 0.3.0 uses.
     pub fn from_nagisa_dir(dir: impl AsRef<Path>) -> Result<Self, JaError> {
         let dir = dir.as_ref();
         let vocab = load_vocab(dir)?;
@@ -126,7 +128,7 @@ impl JaSegmenter {
         })
     }
 
-    /// Segment text, targeting `nagisa.tagging(text).words` for nagisa 0.2.11
+    /// Segment text, targeting `nagisa.tagging(text).words` for nagisa 0.3.0
     /// under CPython 3.12 (Unicode 15.0.0).
     ///
     /// The words are cut out of the *preprocessed* text (`str.rstrip()`, NFKC,

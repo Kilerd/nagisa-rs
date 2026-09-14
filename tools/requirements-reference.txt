@@ -1,5 +1,5 @@
 # CPython 3.12 / Unicode 15.0.0; used only for parity and benchmarks.
-nagisa==0.2.11
+nagisa==0.3.0
 DyNet38==2.2
 numpy==2.5.3
 Cython==3.3.0

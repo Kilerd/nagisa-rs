@@ -17,8 +17,8 @@ def main():
     if unicodedata.unidata_version != "15.0.0":
         raise SystemExit("expected Unicode 15.0.0")
     import nagisa
-    if nagisa.__version__ != "0.2.11":
-        raise SystemExit("expected nagisa 0.2.11")
+    if nagisa.__version__ != "0.3.0":
+        raise SystemExit("expected nagisa 0.3.0")
     # Read before opening output so in-place regeneration is safe.
     with args.input.open(encoding="utf-8") as source:
         cases = [json.loads(line) for line in source if line.strip()]
