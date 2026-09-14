@@ -17,8 +17,8 @@ pub struct TaggedText {
 ///
 /// ```
 /// # #[cfg(feature = "bundled-model")]
-/// # fn main() -> Result<(), nagisa_rs::JaError> {
-/// let tagger = nagisa_rs::Tagger::new()?;
+/// # fn main() -> Result<(), ragisa::JaError> {
+/// let tagger = ragisa::Tagger::new()?;
 /// let result = tagger.tagging("Pythonで簡単に使えるツールです");
 /// assert_eq!(result.postags, ["名詞", "助詞", "形状詞", "助動詞", "動詞", "名詞", "助動詞"]);
 /// # Ok(())

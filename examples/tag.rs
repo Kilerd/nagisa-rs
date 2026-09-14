@@ -1,5 +1,5 @@
 //! Read one text per stdin line and emit JSON words and POS labels.
-use nagisa_rs::Tagger;
+use ragisa::Tagger;
 use std::io::{BufRead, Write};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

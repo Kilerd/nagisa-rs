@@ -12,8 +12,8 @@
 //!
 //! ```
 //! # #[cfg(feature = "bundled-model")]
-//! # fn main() -> Result<(), nagisa_rs::JaError> {
-//! let seg = nagisa_rs::JaSegmenter::new()?;
+//! # fn main() -> Result<(), ragisa::JaError> {
+//! let seg = ragisa::JaSegmenter::new()?;
 //! assert_eq!(seg.words("Pythonで簡単に使えるツールです"),
 //!            ["Python", "で", "簡単", "に", "使える", "ツール", "です"]);
 //! # Ok(())

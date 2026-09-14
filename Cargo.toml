@@ -1,5 +1,5 @@
 [package]
-name = "nagisa-rs"
+name = "ragisa"
 version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
@@ -16,7 +16,7 @@ resolver = "3"
 
 [features]
 default = ["bundled-model"]
-bundled-model = ["dep:nagisa-rs-model"]
+bundled-model = ["dep:ragisa-model"]
 
 [lints.rust]
 unsafe_code = "forbid"
@@ -27,7 +27,7 @@ all = "deny"
 [dependencies]
 thiserror = "2"
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
-nagisa-rs-model = { version = "=0.1.0", path = "model", optional = true }
+ragisa-model = { version = "=0.1.0", path = "model", optional = true }
 
 [dev-dependencies]
 serde = { version = "1", features = ["derive"] }

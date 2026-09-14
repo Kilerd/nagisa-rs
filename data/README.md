@@ -11,7 +11,7 @@ and contributors. They are redistributed under the upstream
 - `manifest.json` records upstream and bundled SHA-256 hashes and asset sizes.
 
 Both assets are committed as regular Git files, included in their Cargo
-packages and embedded with `include_bytes!`. `nagisa-rs-model` carries the
+packages and embedded with `include_bytes!`. `ragisa-model` carries the
 weights and is an automatic dependency of the default `bundled-model`
 feature. Each compressed crate fits under crates.io's default 10 MiB limit.
 Loading requires no network, external paths, temporary files or writable cache.
@@ -23,7 +23,7 @@ python3 tools/download_model.py
 python3 tools/bundle_model.py --check
 # To rewrite from the same checksum-pinned source:
 python3 tools/bundle_model.py
-NAGISA_RS_MODEL_DIR="$PWD/models/nagisa-0.2.11" cargo test --release --locked
+RAGISA_MODEL_DIR="$PWD/models/nagisa-0.2.11" cargo test --release --locked
 ```
 
 The checker compares the dictionary byte-for-byte and every binary model

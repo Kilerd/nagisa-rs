@@ -1,4 +1,4 @@
-use nagisa_rs::{JaError, Tagger};
+use ragisa::{JaError, Tagger};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -13,7 +13,7 @@ mod common;
 use common::tagger;
 
 fn cases() -> Vec<Case> {
-    let root = std::env::var_os("NAGISA_RS_FIXTURES").map_or_else(
+    let root = std::env::var_os("RAGISA_FIXTURES").map_or_else(
         || Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures"),
         PathBuf::from,
     );
@@ -49,7 +49,7 @@ fn cases() -> Vec<Case> {
 #[test]
 #[cfg_attr(
     not(any(have_nagisa_dir, feature = "bundled-model")),
-    ignore = "set NAGISA_RS_MODEL_DIR for POS parity"
+    ignore = "set RAGISA_MODEL_DIR for POS parity"
 )]
 fn tagging_matches_python() {
     let tagger = tagger();
@@ -79,7 +79,7 @@ fn tagging_matches_python() {
 #[test]
 #[cfg_attr(
     not(any(have_nagisa_dir, feature = "bundled-model")),
-    ignore = "set NAGISA_RS_MODEL_DIR for pre-tokenized POS parity"
+    ignore = "set RAGISA_MODEL_DIR for pre-tokenized POS parity"
 )]
 fn postagging_matches_python_and_rejects_empty_tokens() {
     #[derive(Deserialize)]
@@ -111,7 +111,7 @@ fn postagging_matches_python_and_rejects_empty_tokens() {
 #[test]
 #[cfg_attr(
     not(any(have_nagisa_dir, feature = "bundled-model")),
-    ignore = "set NAGISA_RS_MODEL_DIR for concurrent POS parity"
+    ignore = "set RAGISA_MODEL_DIR for concurrent POS parity"
 )]
 fn tagging_is_send_sync_and_reentrant() {
     fn send_sync<T: Send + Sync>() {}

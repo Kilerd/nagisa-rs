@@ -2,7 +2,7 @@
 
 The library lives at the repository root. Runtime dependencies are
 `thiserror`, `flate2` (using the Rust decompressor), and the optional
-`nagisa-rs-model` data crate enabled by default. `serde` and
+`ragisa-model` data crate enabled by default. `serde` and
 `serde_json` are development dependencies for examples and fixture readers.
 
 The segmentation algorithm uses a three-character window of unigram, bigram and
@@ -19,7 +19,7 @@ Python pickle instructions.
 
 The default `bundled-model` feature exposes `JaSegmenter::new()` and
 `Tagger::new()`. The original dictionary is embedded from `data/`; weights
-are embedded by the same-workspace `nagisa-rs-model` crate in `model/`.
+are embedded by the same-workspace `ragisa-model` crate in `model/`.
 Both loaders decode in memory without runtime paths, caches, extraction,
 network access, build-time downloads or Python. Disabling default features
 removes the embedded data from the executable and the model dependency;
@@ -43,8 +43,8 @@ The consumer builds from the normalized Cargo archives with no network,
 then runs from an empty directory after the extracted package sources are
 deleted. The check also enforces package sizes and bundled license files.
 
-When making a crates.io release, publish `nagisa-rs-model` first, then
-`nagisa-rs`. The parent pins the model crate's exact version. Keep that
+When making a crates.io release, publish `ragisa-model` first, then
+`ragisa`. The parent pins the model crate's exact version. Keep that
 dependency version in sync when changing model data or storage format.
 Ordinary clients only add the main crate; Cargo installs the data dependency.
 
@@ -52,10 +52,10 @@ Ordinary clients only add the main crate; Cargo installs the data dependency.
 
 | Variable | Data |
 |---|---|
-| `NAGISA_RS_MODEL_DIR` | Optional original model directory; unset to test bundled loading |
-| `NAGISA_RS_FIXTURES` | Word/POS reference JSONL file or directory |
-| `NAGISA_RS_UNICODE_REF` | Unicode scalar reference TSV file |
-| `NAGISA_RS_UNICODE_SWEEPS` | Directory containing Unicode sequence references |
+| `RAGISA_MODEL_DIR` | Optional original model directory; unset to test bundled loading |
+| `RAGISA_FIXTURES` | Word/POS reference JSONL file or directory |
+| `RAGISA_UNICODE_REF` | Unicode scalar reference TSV file |
+| `RAGISA_UNICODE_SWEEPS` | Directory containing Unicode sequence references |
 
 Cargo's build script controls which data-dependent tests are enabled.
 It does not fetch data.
@@ -87,9 +87,9 @@ Generate the exhaustive audit files and run all tests:
 
 ```sh
 .venv/bin/python tools/unicode.py --check --references results/unicode --sweeps
-# Also set NAGISA_RS_MODEL_DIR to check original-file loading and all weight bits.
-export NAGISA_RS_UNICODE_REF="$PWD/results/unicode/singles.tsv"
-export NAGISA_RS_UNICODE_SWEEPS="$PWD/results/unicode"
+# Also set RAGISA_MODEL_DIR to check original-file loading and all weight bits.
+export RAGISA_UNICODE_REF="$PWD/results/unicode/singles.tsv"
+export RAGISA_UNICODE_SWEEPS="$PWD/results/unicode"
 cargo test --release --locked
 ```
 
@@ -132,11 +132,11 @@ Regenerate fixtures using the pinned reference environment:
 .venv/bin/python tools/pos_reference.py results/pos
 .venv/bin/python tools/options_reference.py results/options.json
 cmp tests/fixtures/options.json results/options.json
-NAGISA_RS_FIXTURES="$PWD/results/tagging.jsonl" \
+RAGISA_FIXTURES="$PWD/results/tagging.jsonl" \
   cargo test --release --locked --test parity --test tagging
 ```
 
-Unset `NAGISA_RS_MODEL_DIR` to check the bundled model, or set it to compare
+Unset `RAGISA_MODEL_DIR` to check the bundled model, or set it to compare
 the original-file loader. Candidate-feature and pre-tokenized POS
 fixtures are committed and regenerated in CI. The 1,713 text fixtures now
 contain both `words` and `postags`; the original inputs and word outputs

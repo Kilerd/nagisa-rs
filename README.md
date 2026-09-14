@@ -1,4 +1,4 @@
-# nagisa-rs
+# ragisa
 
 Pure Rust Japanese word segmentation and POS tagging using the pretrained model from
 [**nagisa**](https://github.com/taishi-i/nagisa), the Python/Cython tokenizer
@@ -60,13 +60,13 @@ Use the repository as a dependency until the first crates.io release:
 
 ```toml
 [dependencies]
-nagisa-rs = { git = "https://github.com/Kilerd/ragisa" }
+ragisa = { git = "https://github.com/Kilerd/ragisa" }
 ```
 
 ```rust
-use nagisa_rs::JaSegmenter;
+use ragisa::JaSegmenter;
 
-fn main() -> Result<(), nagisa_rs::JaError> {
+fn main() -> Result<(), ragisa::JaError> {
     let segmenter = JaSegmenter::new()?;
     let words = segmenter.words("Pythonで簡単に使えるツールです");
     assert_eq!(words, ["Python", "で", "簡単", "に", "使える", "ツール", "です"]);
@@ -77,9 +77,9 @@ fn main() -> Result<(), nagisa_rs::JaError> {
 For word segmentation **and** POS tags:
 
 ```rust
-use nagisa_rs::Tagger;
+use ragisa::Tagger;
 
-fn main() -> Result<(), nagisa_rs::JaError> {
+fn main() -> Result<(), ragisa::JaError> {
     let tagger = Tagger::new()?;
     let result = tagger.tagging("Pythonで簡単に使えるツールです");
     assert_eq!(result.postags, ["名詞", "助詞", "形状詞", "助動詞", "動詞", "名詞", "助動詞"]);
@@ -106,7 +106,7 @@ To emit both `words` and `postags` as JSON, use `--example tag` with the same
 arguments and line-based input.
 
 The default `bundled-model` feature embeds the dictionary and weights in the
-application. Cargo automatically installs the `nagisa-rs-model` data dependency;
+application. Cargo automatically installs the `ragisa-model` data dependency;
 each crate stays below crates.io's default 10 MiB upload limit. All assets
 are committed in this repository and load entirely in memory. The original
 MIT license and checksums are included. See [bundled data](data/README.md).
@@ -119,7 +119,7 @@ external loaders are also available with default features enabled.
 
 ```toml
 [dependencies]
-nagisa-rs = { git = "https://github.com/Kilerd/ragisa", default-features = false }
+ragisa = { git = "https://github.com/Kilerd/ragisa", default-features = false }
 ```
 
 `python3 tools/download_model.py` is an optional maintainer/reference helper
@@ -132,9 +132,9 @@ data-directory argument to either CLI example selects the external loader.
 ### Casing, user dictionaries and POS selection
 
 ```rust
-use nagisa_rs::{Tagger, TextOptions};
+use ragisa::{Tagger, TextOptions};
 
-fn main() -> Result<(), nagisa_rs::JaError> {
+fn main() -> Result<(), ragisa::JaError> {
     let tagger = Tagger::new()?
         .with_single_word_list(["東京大学", "C++"]);
     let lower = TextOptions { lower: true };
@@ -250,7 +250,7 @@ To check the original-file loader as well as every bundled weight's f32 bits:
 ```sh
 python3 tools/download_model.py
 python3 tools/bundle_model.py --check
-export NAGISA_RS_MODEL_DIR="$PWD/models/nagisa-0.2.11"
+export RAGISA_MODEL_DIR="$PWD/models/nagisa-0.2.11"
 cargo test --release --locked
 ```
 
@@ -259,10 +259,10 @@ To regenerate both word and POS reference outputs with Python and compare agains
 ```sh
 .venv/bin/python tools/reference.py \
   tests/fixtures/ja_parity_subset.jsonl results/reference.jsonl
-NAGISA_RS_FIXTURES="$PWD/results/reference.jsonl" cargo test --release --locked --test parity --test tagging
+RAGISA_FIXTURES="$PWD/results/reference.jsonl" cargo test --release --locked --test parity --test tagging
 ```
 
-Unset `NAGISA_RS_MODEL_DIR` to test bundled loading. `NAGISA_RS_FIXTURES` accepts either a
+Unset `RAGISA_MODEL_DIR` to test bundled loading. `RAGISA_FIXTURES` accepts either a
 JSONL file or a directory of word fixtures. Each record contains `text`,
 `words`, `postags`, and an optional `cat`; `prepro_cases.jsonl` is reserved for the
 separate preprocessing test. See [fixture provenance](tests/fixtures/README.md).

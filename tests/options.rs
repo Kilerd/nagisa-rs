@@ -1,4 +1,4 @@
-use nagisa_rs::{JaError, TaggedText, Tagger, TextOptions};
+use ragisa::{JaError, TaggedText, Tagger, TextOptions};
 mod common;
 use serde::Deserialize;
 use std::sync::OnceLock;
@@ -68,7 +68,7 @@ fn tagger() -> &'static Tagger {
 #[test]
 #[cfg_attr(
     not(any(have_nagisa_dir, feature = "bundled-model")),
-    ignore = "set NAGISA_RS_MODEL_DIR for lowercase parity"
+    ignore = "set RAGISA_MODEL_DIR for lowercase parity"
 )]
 fn lowercase_matches_python_words_and_postags() {
     let segmenter = common::segmenter();
@@ -112,7 +112,7 @@ fn check_selection(tagger: &Tagger, case: &Selection) {
 #[test]
 #[cfg_attr(
     not(any(have_nagisa_dir, feature = "bundled-model")),
-    ignore = "set NAGISA_RS_MODEL_DIR for dictionary parity"
+    ignore = "set RAGISA_MODEL_DIR for dictionary parity"
 )]
 fn dictionaries_match_python_with_normalization_and_casing() {
     for group in &references().dictionaries {
@@ -143,7 +143,7 @@ fn dictionaries_match_python_with_normalization_and_casing() {
 #[test]
 #[cfg_attr(
     not(any(have_nagisa_dir, feature = "bundled-model")),
-    ignore = "set NAGISA_RS_MODEL_DIR for POS selection parity"
+    ignore = "set RAGISA_MODEL_DIR for POS selection parity"
 )]
 fn filter_and_extract_match_python_including_empty_and_unknown_labels() {
     for case in &references().selections {
@@ -154,7 +154,7 @@ fn filter_and_extract_match_python_including_empty_and_unknown_labels() {
 #[test]
 #[cfg_attr(
     not(any(have_nagisa_dir, feature = "bundled-model")),
-    ignore = "set NAGISA_RS_MODEL_DIR for lowercase token POS parity"
+    ignore = "set RAGISA_MODEL_DIR for lowercase token POS parity"
 )]
 fn postagging_with_casing_matches_python() {
     for case in &references().postagging {
@@ -177,7 +177,7 @@ fn postagging_with_casing_matches_python() {
 #[test]
 #[cfg_attr(
     not(any(have_nagisa_dir, feature = "bundled-model")),
-    ignore = "set NAGISA_RS_MODEL_DIR for concurrent option parity"
+    ignore = "set RAGISA_MODEL_DIR for concurrent option parity"
 )]
 fn dictionary_and_options_are_reentrant() {
     let group = &references().dictionaries[2];

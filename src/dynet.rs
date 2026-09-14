@@ -57,7 +57,7 @@ pub(crate) fn load(path: &Path, wanted: &[&str]) -> Result<HashMap<String, RawPa
 pub(crate) fn bundled() -> Result<HashMap<String, RawParam>, JaError> {
     let path = Path::new("bundled/nagisa_v001.bin.gz");
     let mut bytes = Vec::new();
-    flate2::read::GzDecoder::new(nagisa_rs_model::WEIGHTS_GZIP)
+    flate2::read::GzDecoder::new(ragisa_model::WEIGHTS_GZIP)
         .read_to_end(&mut bytes)
         .map_err(|source| JaError::Gzip {
             path: path.into(),
@@ -148,13 +148,13 @@ mod tests {
     #[test]
     #[cfg_attr(
         not(have_nagisa_dir),
-        ignore = "set NAGISA_RS_MODEL_DIR to compare original parameter bits"
+        ignore = "set RAGISA_MODEL_DIR to compare original parameter bits"
     )]
     fn bundled_weights_match_every_original_f32_bit() {
         let bundled = super::bundled().unwrap();
         assert_eq!(bundled.len(), 28);
         let names: Vec<_> = bundled.keys().map(String::as_str).collect();
-        let dir = std::env::var_os("NAGISA_RS_MODEL_DIR").unwrap();
+        let dir = std::env::var_os("RAGISA_MODEL_DIR").unwrap();
         let original = super::load(&super::model_path(std::path::Path::new(&dir)), &names).unwrap();
         for (name, expected) in original {
             let actual = &bundled[&name];

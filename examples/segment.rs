@@ -1,8 +1,8 @@
 //! Read one text per stdin line, print `nagisa.tagging(text).words` as JSON.
 //!
 //! ```text
-//! cargo run --release -p nagisa-rs --example segment < in.txt
-//! cargo run --release -p nagisa-rs --example segment -- <nagisa/data dir> < in.txt
+//! cargo run --release -p ragisa --example segment < in.txt
+//! cargo run --release -p ragisa --example segment -- <nagisa/data dir> < in.txt
 //! ```
 //! Lines are read raw (no unescaping); use it for eyeballing, and `tests/parity.rs`
 //! for the real differential check.
@@ -11,9 +11,9 @@ use std::io::{BufRead, Write};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let seg = match std::env::args().nth(1) {
-        Some(dir) => nagisa_rs::JaSegmenter::from_nagisa_dir(dir)?,
+        Some(dir) => ragisa::JaSegmenter::from_nagisa_dir(dir)?,
         #[cfg(feature = "bundled-model")]
-        None => nagisa_rs::JaSegmenter::new()?,
+        None => ragisa::JaSegmenter::new()?,
         #[cfg(not(feature = "bundled-model"))]
         None => return Err("usage: segment <nagisa data dir> (or enable bundled-model)".into()),
     };

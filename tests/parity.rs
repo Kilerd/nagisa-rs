@@ -4,15 +4,15 @@
 //! produced by `tools/reference.py` with nagisa 0.2.11 itself.
 //!
 //! Environment:
-//! * `NAGISA_RS_MODEL_DIR` -- nagisa's `data/` directory (the one that
+//! * `RAGISA_MODEL_DIR` -- nagisa's `data/` directory (the one that
 //!   holds `nagisa_v001.model`). When unset, use the bundled model.
-//! * `NAGISA_RS_FIXTURES` -- a `.jsonl` file or a directory of them.
+//! * `RAGISA_FIXTURES` -- a `.jsonl` file or a directory of them.
 //!   Defaults to the committed subset in `tests/fixtures/`.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
-use nagisa_rs::JaSegmenter;
+use ragisa::JaSegmenter;
 use serde::Deserialize;
 
 #[derive(Deserialize)]
@@ -26,7 +26,7 @@ struct Case {
 mod common;
 
 fn fixture_files() -> Vec<PathBuf> {
-    let root = std::env::var_os("NAGISA_RS_FIXTURES").map_or_else(
+    let root = std::env::var_os("RAGISA_FIXTURES").map_or_else(
         || Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures"),
         PathBuf::from,
     );
@@ -66,16 +66,13 @@ fn load_cases() -> Vec<Case> {
 
 #[cfg_attr(
     not(any(have_nagisa_dir, feature = "bundled-model")),
-    ignore = "needs nagisa's data/ dir: set NAGISA_RS_MODEL_DIR (see README.md)"
+    ignore = "needs nagisa's data/ dir: set RAGISA_MODEL_DIR (see README.md)"
 )]
 #[test]
 fn words_match_nagisa_exactly() {
     let seg = common::segmenter();
     let cases = load_cases();
-    assert!(
-        !cases.is_empty(),
-        "no fixtures found; set NAGISA_RS_FIXTURES"
-    );
+    assert!(!cases.is_empty(), "no fixtures found; set RAGISA_FIXTURES");
 
     let mut per_cat: BTreeMap<&str, (usize, usize)> = BTreeMap::new();
     let mut shown = 0usize;
@@ -105,7 +102,7 @@ fn words_match_nagisa_exactly() {
 
 #[cfg_attr(
     not(any(have_nagisa_dir, feature = "bundled-model")),
-    ignore = "needs nagisa's data/ dir: set NAGISA_RS_MODEL_DIR (see README.md)"
+    ignore = "needs nagisa's data/ dir: set RAGISA_MODEL_DIR (see README.md)"
 )]
 #[test]
 fn probes() {
@@ -133,7 +130,7 @@ fn probes() {
 
 #[cfg_attr(
     not(any(have_nagisa_dir, feature = "bundled-model")),
-    ignore = "needs nagisa's data/ dir: set NAGISA_RS_MODEL_DIR (see README.md)"
+    ignore = "needs nagisa's data/ dir: set RAGISA_MODEL_DIR (see README.md)"
 )]
 #[test]
 fn is_send_sync_and_reentrant() {

@@ -1,5 +1,5 @@
 //! JSON benchmark worker used by tools/benchmark.py; timings exclude I/O and loading.
-use nagisa_rs::JaSegmenter;
+use ragisa::JaSegmenter;
 use serde::{Deserialize, Serialize};
 use std::hint::black_box;
 use std::time::Instant;
