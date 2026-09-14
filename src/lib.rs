@@ -1,22 +1,25 @@
 //! Pure-Rust Japanese word segmentation and POS tagging with nagisa 0.2.11.
 //! Targets `nagisa.tagging(text).words` and `.postags` under CPython 3.12.
 //!
-//! It loads nagisa's own data files -- `nagisa_v001.dict` (a gzipped pickle of
-//! the vocabularies) and
-//! `nagisa_v001.model` (DyNet's text parameter format) -- straight out of the
-//! installed package's `data/` directory, so there is no conversion step and no
-//! second copy of the weights to keep in sync.
+//! The original pretrained dictionary and lossless f32 weights are bundled
+//! by default. `JaSegmenter::new()` and `Tagger::new()` load them in memory,
+//! without Python, network access, model paths or temporary files.
+//! [`JaSegmenter::from_nagisa_dir`] and [`Tagger::from_nagisa_dir`] also read
+//! the original `nagisa_v001.dict` and DyNet text model files directly.
 //!
-//! [`JaSegmenter`] loads only segmentation data. [`Tagger`] also loads the POS
+//! [`JaSegmenter`] retains only segmentation data. [`Tagger`] also retains the POS
 //! dictionary and networks and returns [`TaggedText`] with words and labels.
 //!
-//! ```no_run
+//! ```
+//! # #[cfg(feature = "bundled-model")]
 //! # fn main() -> Result<(), nagisa_rs::JaError> {
-//! let seg = nagisa_rs::JaSegmenter::from_nagisa_dir("/venv/lib/python3.12/site-packages/nagisa/data")?;
+//! let seg = nagisa_rs::JaSegmenter::new()?;
 //! assert_eq!(seg.words("Pythonで簡単に使えるツールです"),
 //!            ["Python", "で", "簡単", "に", "使える", "ツール", "です"]);
 //! # Ok(())
 //! # }
+//! # #[cfg(not(feature = "bundled-model"))]
+//! # fn main() {}
 //! ```
 //!
 //! [`JaSegmenter`] is immutable after construction: [`JaSegmenter::words`] takes
@@ -82,6 +85,25 @@ impl std::fmt::Debug for JaSegmenter {
 }
 
 impl JaSegmenter {
+    /// Load the bundled nagisa 0.2.11 model, without file or network access.
+    /// Available with the default `bundled-model` feature. Load once and reuse.
+    ///
+    /// # Errors
+    /// Returns [`JaError`] if the bundled model cannot be decoded or validated.
+    #[cfg(feature = "bundled-model")]
+    pub fn new() -> Result<Self, JaError> {
+        let vocab = vocab_from(pickle::parse_vocabs(&bundled_dictionary()?)?)?;
+        let weights = weights_from(
+            &mut dynet::bundled()?,
+            Path::new("bundled/nagisa_v001.bin.gz"),
+        )?;
+        Ok(Self {
+            vocab,
+            weights,
+            dictionary: dictionary::Dictionary::default(),
+        })
+    }
+
     /// Load the segmenter from a nagisa `data/` directory.
     ///
     /// `dir` must contain `nagisa_v001.dict` and `nagisa_v001.model`, i.e. the
@@ -164,11 +186,23 @@ fn read_dictionary(dir: &Path) -> Result<Vec<u8>, JaError> {
         path: path.clone(),
         source,
     })?;
+    inflate_dictionary(std::io::BufReader::with_capacity(1 << 20, file), &path)
+}
+
+#[cfg(feature = "bundled-model")]
+fn bundled_dictionary() -> Result<Vec<u8>, JaError> {
+    inflate_dictionary(
+        &include_bytes!("../data/nagisa_v001.dict")[..],
+        Path::new("bundled/nagisa_v001.dict"),
+    )
+}
+
+fn inflate_dictionary(reader: impl Read, path: &Path) -> Result<Vec<u8>, JaError> {
     let mut raw = Vec::new();
-    flate2::read::GzDecoder::new(std::io::BufReader::with_capacity(1 << 20, file))
+    flate2::read::GzDecoder::new(reader)
         .read_to_end(&mut raw)
         .map_err(|source| JaError::Gzip {
-            path: path.clone(),
+            path: path.to_owned(),
             source,
         })?;
     Ok(raw)
@@ -197,17 +231,23 @@ fn load_weights(dir: &Path) -> Result<Weights, JaError> {
         "/_0", "/_1", "/_2", "/_3", "/_5", "/_6", "/_7", FWD_X, FWD_H, FWD_B, BWD_X, BWD_H, BWD_B,
     ];
     let mut p = dynet::load(&path, &wanted)?;
+    weights_from(&mut p, &path)
+}
 
+fn weights_from(
+    p: &mut std::collections::HashMap<String, dynet::RawParam>,
+    path: &Path,
+) -> Result<Weights, JaError> {
     // The lookup tables are `{dim, vocab_size}`; the vocabulary sizes come from
     // the file itself (3090 / 82114 / 59260 for nagisa_v001) so only the
     // embedding width is pinned here.
-    let uni = dynet::take_lookup(&mut p, &path, "/_0", DIM_UNI)?;
-    let bi = dynet::take_lookup(&mut p, &path, "/_1", DIM_BI)?;
-    let word = dynet::take_lookup(&mut p, &path, "/_2", DIM_WORD)?;
-    let ctype = dynet::take(&mut p, &path, "/_3", &[DIM_CTYPE, N_CTYPE])?;
-    let w_ws = dynet::take(&mut p, &path, "/_5", &[DIM_OUT, DIM_HIDDEN])?;
-    let b_ws = dynet::take(&mut p, &path, "/_6", &[DIM_OUT])?;
-    let trans_flat = dynet::take(&mut p, &path, "/_7", &[DIM_OUT, DIM_OUT])?;
+    let uni = dynet::take_lookup(p, path, "/_0", DIM_UNI)?;
+    let bi = dynet::take_lookup(p, path, "/_1", DIM_BI)?;
+    let word = dynet::take_lookup(p, path, "/_2", DIM_WORD)?;
+    let ctype = dynet::take(p, path, "/_3", &[DIM_CTYPE, N_CTYPE])?;
+    let w_ws = dynet::take(p, path, "/_5", &[DIM_OUT, DIM_HIDDEN])?;
+    let b_ws = dynet::take(p, path, "/_6", &[DIM_OUT])?;
+    let trans_flat = dynet::take(p, path, "/_7", &[DIM_OUT, DIM_OUT])?;
 
     let mut trans = [[0.0f64; DIM_OUT]; DIM_OUT];
     for (next, row) in trans.iter_mut().enumerate() {
@@ -218,14 +258,14 @@ fn load_weights(dir: &Path) -> Result<Weights, JaError> {
 
     let h4 = DIM_DIR * 4;
     let fwd = Lstm {
-        wx: dynet::take(&mut p, &path, FWD_X, &[h4, DIM_INPUT])?,
-        wh: dynet::take(&mut p, &path, FWD_H, &[h4, DIM_DIR])?,
-        b: dynet::take(&mut p, &path, FWD_B, &[h4])?,
+        wx: dynet::take(p, path, FWD_X, &[h4, DIM_INPUT])?,
+        wh: dynet::take(p, path, FWD_H, &[h4, DIM_DIR])?,
+        b: dynet::take(p, path, FWD_B, &[h4])?,
     };
     let bwd = Lstm {
-        wx: dynet::take(&mut p, &path, BWD_X, &[h4, DIM_INPUT])?,
-        wh: dynet::take(&mut p, &path, BWD_H, &[h4, DIM_DIR])?,
-        b: dynet::take(&mut p, &path, BWD_B, &[h4])?,
+        wx: dynet::take(p, path, BWD_X, &[h4, DIM_INPUT])?,
+        wh: dynet::take(p, path, BWD_H, &[h4, DIM_DIR])?,
+        b: dynet::take(p, path, BWD_B, &[h4])?,
     };
 
     Ok(Weights {

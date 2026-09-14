@@ -9,8 +9,9 @@ upstream features are available here.
 
 The compatibility target is the default word and POS output of `nagisa.tagging(text)` from
 [nagisa 0.2.11](https://pypi.org/project/nagisa/0.2.11/), running under CPython
-3.12 (Unicode 15.0.0). It reads the original model files directly and needs
-**no Python, DyNet, BLAS, GPU, or native inference library at runtime**.
+3.12 (Unicode 15.0.0). The pretrained model is **bundled by default**: no
+separate model download, model path, Python, DyNet, BLAS, GPU, or native
+inference library is needed at runtime.
 
 ## Upstream feature checklist
 
@@ -27,8 +28,9 @@ API compatibility with every nagisa release.
   and the default noun heuristic. Tokens that become empty return a Rust error.
 - [x] **Available POS labels** — `Tagger::postags()` exposes the original
   model's 24 labels in numeric ID order, including `oov`.
-- [x] **Original pretrained model** — load `nagisa_v001.dict` and
-  `nagisa_v001.model` directly, without conversion.
+- [x] **Original pretrained model** — the bundled dictionary and lossless
+  f32 weights are available through `new()`. `from_nagisa_dir()` also loads
+  the original `nagisa_v001.dict` and `nagisa_v001.model` without conversion.
 - [x] **Default preprocessing** — CPython 3.12 whitespace removal, NFKC,
   `İ` → `I`, ASCII space → `U+3000`, and contextual lowercase features.
 - [x] **Lowercase output option** — `TextOptions { lower: true }` in the
@@ -44,8 +46,8 @@ API compatibility with every nagisa release.
   and `hp` configurations; only the original 0.2.11 architecture is supported.
 
 Both Rust types are immutable, `Send + Sync`, and reentrant. Load once and
-share between threads. `JaSegmenter` loads only segmentation data; `Tagger`
-additionally loads the POS dictionary and neural networks. Inference is pure
+share between threads. `JaSegmenter` retains only segmentation data; `Tagger`
+additionally retains the POS dictionary and neural networks. Inference is pure
 Rust and `unsafe_code` is forbidden. Tokens refer to normalized text rather
 than byte offsets in the original input. Parity is tested on the bundled
 corpus, not guaranteed for all text or floating-point platforms.
@@ -54,31 +56,18 @@ corpus, not guaranteed for all text or floating-point platforms.
 
 The project is tested with Rust **1.97.1**. Use a recent stable Rust toolchain.
 
-Download the original data with a standard-library-only Python script:
-
-```sh
-python3 tools/download_model.py
-```
-
-This verifies the SHA-256 of the pinned nagisa 0.2.11 source distribution and
-extracts `nagisa_v001.dict`, `nagisa_v001.model`, and its license into
-`models/nagisa-0.2.11/`. It does not install nagisa or execute its setup code.
-The dictionary and model total approximately 46.4 MB uncompressed. If nagisa
-0.2.11 is already installed, you can instead use its `nagisa/data/` directory.
-Python is only needed for this setup helper or comparison tools, not inference.
-
-Use this checkout as a dependency:
+Use the repository as a dependency until the first crates.io release:
 
 ```toml
 [dependencies]
-nagisa-rs = { path = "../nagisa-rs" }
+nagisa-rs = { git = "https://github.com/Kilerd/ragisa" }
 ```
 
 ```rust
 use nagisa_rs::JaSegmenter;
 
 fn main() -> Result<(), nagisa_rs::JaError> {
-    let segmenter = JaSegmenter::from_nagisa_dir("models/nagisa-0.2.11")?;
+    let segmenter = JaSegmenter::new()?;
     let words = segmenter.words("Pythonで簡単に使えるツールです");
     assert_eq!(words, ["Python", "で", "簡単", "に", "使える", "ツール", "です"]);
     Ok(())
@@ -91,7 +80,7 @@ For word segmentation **and** POS tags:
 use nagisa_rs::Tagger;
 
 fn main() -> Result<(), nagisa_rs::JaError> {
-    let tagger = Tagger::from_nagisa_dir("models/nagisa-0.2.11")?;
+    let tagger = Tagger::new()?;
     let result = tagger.tagging("Pythonで簡単に使えるツールです");
     assert_eq!(result.postags, ["名詞", "助詞", "形状詞", "助動詞", "動詞", "名詞", "助動詞"]);
     assert_eq!(tagger.postagging(&result.words)?, result.postags);
@@ -109,16 +98,36 @@ per line:
 
 ```sh
 printf '%s\n' 'Pythonで簡単に使えるツールです' |
-  cargo run --release --locked --example segment -- models/nagisa-0.2.11
+  cargo run --release --locked --example segment
 # ["Python","で","簡単","に","使える","ツール","です"]
 ```
 
 To emit both `words` and `postags` as JSON, use `--example tag` with the same
 arguments and line-based input.
 
-Only `nagisa_v001.dict` and `nagisa_v001.model` are needed. Model dimensions
-are fixed to the shipped nagisa 0.2.11 model; `.hp` is not read. Model files
-are distributed separately and are not embedded in the crate.
+The default `bundled-model` feature embeds the dictionary and weights in the
+application. Cargo automatically installs the `nagisa-rs-model` data dependency;
+each crate stays below crates.io's default 10 MiB upload limit. All assets
+are committed in this repository and load entirely in memory. The original
+MIT license and checksums are included. See [bundled data](data/README.md).
+
+### Optional external model files
+
+To manage model files yourself, disable default features and use
+`JaSegmenter::from_nagisa_dir(dir)` or `Tagger::from_nagisa_dir(dir)`. The
+external loaders are also available with default features enabled.
+
+```toml
+[dependencies]
+nagisa-rs = { git = "https://github.com/Kilerd/ragisa", default-features = false }
+```
+
+`python3 tools/download_model.py` is an optional maintainer/reference helper
+that verifies the pinned source archive's SHA-256 and extracts the original
+files to `models/nagisa-0.2.11/`. Only `nagisa_v001.dict` and
+`nagisa_v001.model` are needed by the external loaders. Model dimensions are
+fixed to nagisa 0.2.11's shipped architecture; `.hp` is not read. Passing a
+data-directory argument to either CLI example selects the external loader.
 
 ### Casing, user dictionaries and POS selection
 
@@ -126,7 +135,7 @@ are distributed separately and are not embedded in the crate.
 use nagisa_rs::{Tagger, TextOptions};
 
 fn main() -> Result<(), nagisa_rs::JaError> {
-    let tagger = Tagger::from_nagisa_dir("models/nagisa-0.2.11")?
+    let tagger = Tagger::new()?
         .with_single_word_list(["東京大学", "C++"]);
     let lower = TextOptions { lower: true };
     assert_eq!(tagger.words_with_options("Python", lower), ["python"]);
@@ -170,7 +179,9 @@ architecture.
 
 These figures measure word segmentation via `JaSegmenter::words()`.
 They do not measure `Tagger::tagging()`. The raw report records the source
-hashes of the measured implementation.
+hashes of the measured implementation at
+[`ccb6232`](https://github.com/Kilerd/ragisa/commit/ccb6232abebd726b14d2c1edd0eb96c039f3a807),
+before bundled loading was added; model loading is excluded from these timings.
 
 | Characters | Python median / p95 (µs) | Rust median / p95 (µs) | Median speedup |
 |---:|---:|---:|---:|
@@ -220,22 +231,25 @@ model directory for both engines.
 
 ```sh
 cargo fmt --all -- --check
-cargo clippy --all-targets --locked -- -D warnings
-cargo test --release --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --release --locked
 ```
 
-Without external data, eleven unit tests and two documentation examples run;
-eleven model tests and two exhaustive Unicode audits are explicitly marked
-**ignored** with setup instructions. The ordinary unit tests include **407**
+With default features, all eleven inference tests and both executable
+documentation examples run using bundled data, without downloading anything.
+Only the original-file bitwise comparison and two exhaustive Unicode audits
+are **ignored** until their reference data is supplied. Unit tests include **407**
 committed preprocessing/lowercase/character-type cases and **6,402** Python
 reference cases for candidate-POS set ordering.
 
-To execute the model tests, including **1,713** reference texts with both
-word and POS outputs, **1,717** lowercase cases, **196** dictionary cases,
-**40** POS selection cases, **20** pre-segmented casing cases, and 8-thread
-reentrancy tests:
+The bundled tests cover **1,713** reference texts with both word and POS
+outputs, **1,717** lowercase cases, **196** dictionary cases, **40** POS
+selection cases, **20** pre-segmented casing cases, and 8-thread reentrancy.
+To check the original-file loader as well as every bundled weight's f32 bits:
 
 ```sh
+python3 tools/download_model.py
+python3 tools/bundle_model.py --check
 export NAGISA_RS_MODEL_DIR="$PWD/models/nagisa-0.2.11"
 cargo test --release --locked
 ```
@@ -248,19 +262,21 @@ To regenerate both word and POS reference outputs with Python and compare agains
 NAGISA_RS_FIXTURES="$PWD/results/reference.jsonl" cargo test --release --locked --test parity --test tagging
 ```
 
-`NAGISA_RS_MODEL_DIR` must remain set. `NAGISA_RS_FIXTURES` accepts either a
+Unset `NAGISA_RS_MODEL_DIR` to test bundled loading. `NAGISA_RS_FIXTURES` accepts either a
 JSONL file or a directory of word fixtures. Each record contains `text`,
 `words`, `postags`, and an optional `cat`; `prepro_cases.jsonl` is reserved for the
 separate preprocessing test. See [fixture provenance](tests/fixtures/README.md).
 
 The current implementation was verified locally with **0 / 1,713 word
 mismatches and 0 / 1,713 POS mismatches**, including both types' 8-thread tests.
-All **26 tests** pass locally with the model and exhaustive Unicode audit data enabled.
+All **27 tests** pass locally with the original model and exhaustive Unicode audit data enabled.
 
-CI runs on Linux and macOS, downloads the model, verifies the Unicode tables,
+CI runs on Linux and macOS, tests bundled loading before any model download,
+then verifies the original data, all f32 weight bits and the Unicode tables,
 runs the scalar Unicode audit, regenerates word/POS, inference-option and candidate-feature
 Python references, and checks the
-packaged crate. The slower combining-sequence sweep is available locally.
+packaged crates. It also checks the external-only build and offline use of
+the distributed packages. The slower combining-sequence sweep is available locally.
 See [maintenance and Unicode audits](docs/maintenance.md).
 
 ## License and acknowledgements

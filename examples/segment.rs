@@ -1,6 +1,7 @@
 //! Read one text per stdin line, print `nagisa.tagging(text).words` as JSON.
 //!
 //! ```text
+//! cargo run --release -p nagisa-rs --example segment < in.txt
 //! cargo run --release -p nagisa-rs --example segment -- <nagisa/data dir> < in.txt
 //! ```
 //! Lines are read raw (no unescaping); use it for eyeballing, and `tests/parity.rs`
@@ -8,12 +9,14 @@
 
 use std::io::{BufRead, Write};
 
-fn main() {
-    let dir = std::env::args().nth(1).unwrap_or_else(|| {
-        eprintln!("usage: segment <nagisa data dir>");
-        std::process::exit(2);
-    });
-    let seg = nagisa_rs::JaSegmenter::from_nagisa_dir(&dir).expect("load nagisa model");
+fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let seg = match std::env::args().nth(1) {
+        Some(dir) => nagisa_rs::JaSegmenter::from_nagisa_dir(dir)?,
+        #[cfg(feature = "bundled-model")]
+        None => nagisa_rs::JaSegmenter::new()?,
+        #[cfg(not(feature = "bundled-model"))]
+        None => return Err("usage: segment <nagisa data dir> (or enable bundled-model)".into()),
+    };
     let stdin = std::io::stdin();
     let mut out = std::io::BufWriter::new(std::io::stdout());
     for line in stdin.lock().lines() {
@@ -22,4 +25,5 @@ fn main() {
         serde_json::to_writer(&mut out, &words).expect("write JSON");
         writeln!(out).expect("write newline");
     }
+    Ok(())
 }

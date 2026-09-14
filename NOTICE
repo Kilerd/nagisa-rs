@@ -9,8 +9,10 @@ https://github.com/taishi-i/nagisa
 https://pypi.org/project/nagisa/0.2.11/
 Copyright (c) 2018 taishi-i
 The upstream MIT license is reproduced in licenses/nagisa-MIT.txt.
-The pretrained dictionary and model are supplied separately by nagisa;
-they are not bundled in this repository or the Rust package.
+The original pretrained dictionary is bundled in data/nagisa_v001.dict.
+All original f32 model parameters are bundled without quantization in the
+nagisa-rs-model data crate. Both assets remain under the upstream MIT
+license. Source and asset hashes are recorded in data/manifest.json.
 
 Unicode normalization and casing tables were generated from CPython
 3.12.14 (Unicode 15.0.0). The Unicode data license is reproduced in

@@ -1,0 +1,23 @@
+{
+  "upstream": "https://github.com/taishi-i/nagisa/tree/0.2.11",
+  "version": "0.2.11",
+  "license": "MIT",
+  "source_sha256": {
+    "nagisa_v001.dict": "968ac9e6c7a53051ef24d8561673dd31de81b2feb9b5bff01b1d3b6b2473113c",
+    "nagisa_v001.model": "9db9abc06a927c56e18af8d485e20a14908138752be459a83f0dc7ac85368c1b",
+    "LICENSE-nagisa.txt": "fa2fb3121bd2250c66169e769cdf32836394c5f60306b814462c06881a06f0cd"
+  },
+  "format": "NAGISA-v1: original DyNet header lines followed by little-endian f32 values",
+  "parameters": 28,
+  "uncompressed_weights_sha256": "7086ad744841fdfb0b0fec56b77f78872bcbdb2668b36c7c81d7ee161e9974f0",
+  "assets": {
+    "data/nagisa_v001.dict": {
+      "sha256": "968ac9e6c7a53051ef24d8561673dd31de81b2feb9b5bff01b1d3b6b2473113c",
+      "bytes": 6152363
+    },
+    "model/data/nagisa_v001.bin.gz": {
+      "sha256": "5cc76dc0121e2e784626005d4cbba50a2d29d22d72b1216a0a9cd6d369e1d559",
+      "bytes": 9246355
+    }
+  }
+}

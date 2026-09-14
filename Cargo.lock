@@ -60,10 +60,15 @@ name = "nagisa-rs"
 version = "0.1.0"
 dependencies = [
  "flate2",
+ "nagisa-rs-model",
  "serde",
  "serde_json",
  "thiserror",
 ]
+
+[[package]]
+name = "nagisa-rs-model"
+version = "0.1.0"
 
 [[package]]
 name = "proc-macro2"

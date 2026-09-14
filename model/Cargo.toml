@@ -1,0 +1,12 @@
+[package]
+name = "nagisa-rs-model"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Bundled nagisa 0.2.11 pretrained weights for nagisa-rs"
+repository = "https://github.com/Kilerd/ragisa"
+readme = "README.md"
+include = ["/src", "/data", "/README.md", "/LICENSE"]
+
+[lints.rust]
+unsafe_code = "forbid"

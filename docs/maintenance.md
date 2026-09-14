@@ -1,23 +1,58 @@
 # Maintenance
 
-The library lives at the repository root. Runtime dependencies are only
-`thiserror` and `flate2` (using the Rust decompressor). `serde` and
+The library lives at the repository root. Runtime dependencies are
+`thiserror`, `flate2` (using the Rust decompressor), and the optional
+`nagisa-rs-model` data crate enabled by default. `serde` and
 `serde_json` are development dependencies for examples and fixture readers.
 
 The segmentation algorithm uses a three-character window of unigram, bigram and
 character-type embeddings, plus dictionary-word features, to form a
 200-dimensional input. A bidirectional LSTM with 50 units per direction
-feeds a BMES CRF/Viterbi decoder. `JaSegmenter` loads only segmentation parameters. `Tagger` adds the
+feeds a BMES CRF/Viterbi decoder. `JaSegmenter` retains only segmentation parameters. `Tagger` adds the
 POS candidate dictionary, tag embeddings, character BiLSTM, token BiLSTM
 and 24-label output projection, sharing the segmentation embeddings. `src/pickle.rs` reads the vocabulary
 portion of the original gzip/pickle file, and `src/dynet.rs` reads DyNet text
-parameters without executing Python pickle instructions.
+parameters and the bundled binary representation. Neither loader executes
+Python pickle instructions.
+
+## Bundled model and release packaging
+
+The default `bundled-model` feature exposes `JaSegmenter::new()` and
+`Tagger::new()`. The original dictionary is embedded from `data/`; weights
+are embedded by the same-workspace `nagisa-rs-model` crate in `model/`.
+Both loaders decode in memory without runtime paths, caches, extraction,
+network access, build-time downloads or Python. Disabling default features
+removes the embedded data from the executable and the model dependency;
+the main crate's source archive still contains its dictionary.
+
+The weights use lossless little-endian f32 storage; every bit is checked
+against the original text loader. [Data documentation](../data/README.md)
+describes the format, licenses, pinned hashes and regeneration commands.
+Use `python3 tools/bundle_model.py --check` after fetching the original model
+to verify that the committed assets have not drifted.
+
+Each compressed package must remain below 10 MiB, crates.io's default
+upload limit. Verify both archives and an offline consumer with:
+
+```sh
+cargo package --workspace --locked
+python3 tools/check_package.py
+```
+
+The consumer builds from the normalized Cargo archives with no network,
+then runs from an empty directory after the extracted package sources are
+deleted. The check also enforces package sizes and bundled license files.
+
+When making a crates.io release, publish `nagisa-rs-model` first, then
+`nagisa-rs`. The parent pins the model crate's exact version. Keep that
+dependency version in sync when changing model data or storage format.
+Ordinary clients only add the main crate; Cargo installs the data dependency.
 
 ## Test data configuration
 
 | Variable | Data |
 |---|---|
-| `NAGISA_RS_MODEL_DIR` | Directory containing the original model files |
+| `NAGISA_RS_MODEL_DIR` | Optional original model directory; unset to test bundled loading |
 | `NAGISA_RS_FIXTURES` | Word/POS reference JSONL file or directory |
 | `NAGISA_RS_UNICODE_REF` | Unicode scalar reference TSV file |
 | `NAGISA_RS_UNICODE_SWEEPS` | Directory containing Unicode sequence references |
@@ -52,7 +87,7 @@ Generate the exhaustive audit files and run all tests:
 
 ```sh
 .venv/bin/python tools/unicode.py --check --references results/unicode --sweeps
-export NAGISA_RS_MODEL_DIR="$PWD/models/nagisa-0.2.11"
+# Also set NAGISA_RS_MODEL_DIR to check original-file loading and all weight bits.
 export NAGISA_RS_UNICODE_REF="$PWD/results/unicode/singles.tsv"
 export NAGISA_RS_UNICODE_SWEEPS="$PWD/results/unicode"
 cargo test --release --locked
@@ -61,7 +96,7 @@ cargo test --release --locked
 The scalar audit checks all **1,112,064 Unicode scalar values** (surrogates
 excluded). The sequence audit checks **1,112,064 × 85** (scalar, composing
 mark) pairs and **922 × 922** combining-mark orderings. Reference generation
-can take a few minutes. The full current suite contains thirteen unit tests, eleven integration tests and
+can take a few minutes. The full current suite contains fourteen unit tests, eleven integration tests and
 two documentation tests. Both `JaSegmenter` and `Tagger` have model parity
 and 8-thread reentrancy coverage.
 
@@ -101,7 +136,8 @@ NAGISA_RS_FIXTURES="$PWD/results/tagging.jsonl" \
   cargo test --release --locked --test parity --test tagging
 ```
 
-Keep `NAGISA_RS_MODEL_DIR` set. Candidate-feature and pre-tokenized POS
+Unset `NAGISA_RS_MODEL_DIR` to check the bundled model, or set it to compare
+the original-file loader. Candidate-feature and pre-tokenized POS
 fixtures are committed and regenerated in CI. The 1,713 text fixtures now
 contain both `words` and `postags`; the original inputs and word outputs
 are preserved. Full POS inference, like segmentation, runs without Python

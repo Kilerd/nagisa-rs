@@ -20,7 +20,9 @@
 
 use std::collections::HashMap;
 use std::fs::File;
-use std::io::{BufRead, BufReader, Read, Seek, SeekFrom};
+#[cfg(feature = "bundled-model")]
+use std::io::Read;
+use std::io::{BufRead, BufReader, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
 use crate::error::JaError;
@@ -42,7 +44,37 @@ pub(crate) fn load(path: &Path, wanted: &[&str]) -> Result<HashMap<String, RawPa
         path: path.to_path_buf(),
         source,
     })?;
-    let mut rdr = BufReader::with_capacity(1 << 20, file);
+    load_reader(
+        BufReader::with_capacity(1 << 20, file),
+        path,
+        Some(wanted),
+        false,
+    )
+}
+
+/// Decode the bundled lossless representation entirely in memory.
+#[cfg(feature = "bundled-model")]
+pub(crate) fn bundled() -> Result<HashMap<String, RawParam>, JaError> {
+    let path = Path::new("bundled/nagisa_v001.bin.gz");
+    let mut bytes = Vec::new();
+    flate2::read::GzDecoder::new(nagisa_rs_model::WEIGHTS_GZIP)
+        .read_to_end(&mut bytes)
+        .map_err(|source| JaError::Gzip {
+            path: path.into(),
+            source,
+        })?;
+    let body = bytes
+        .strip_prefix(b"NAGISA\x00\x01")
+        .ok_or_else(|| bad_header(path, 0, &bytes))?;
+    load_reader(std::io::Cursor::new(body), path, None, true)
+}
+
+fn load_reader(
+    mut rdr: impl BufRead + Seek,
+    path: &Path,
+    wanted: Option<&[&str]>,
+    binary: bool,
+) -> Result<HashMap<String, RawParam>, JaError> {
     let mut out: HashMap<String, RawParam> = HashMap::new();
     let mut header = Vec::with_capacity(128);
     let mut offset: u64 = 0;
@@ -64,21 +96,40 @@ pub(crate) fn load(path: &Path, wanted: &[&str]) -> Result<HashMap<String, RawPa
         let line = std::str::from_utf8(&header)
             .map_err(|_| bad_header(path, head_at, &header))?
             .trim_end_matches('\n');
-        let (name, dims, nbytes) =
+        let (name, dims, text_nbytes) =
             parse_header(line).ok_or_else(|| bad_header(path, head_at, &header))?;
+        let count = dims
+            .iter()
+            .try_fold(1usize, |count, dim| count.checked_mul(*dim))
+            .ok_or_else(|| bad_header(path, head_at, &header))?;
+        let nbytes = if binary {
+            count
+                .checked_mul(4)
+                .ok_or_else(|| bad_header(path, head_at, &header))?
+        } else {
+            text_nbytes
+        };
 
-        if wanted.contains(&name) {
+        if wanted.is_none_or(|wanted| wanted.contains(&name)) {
             values.clear();
             values.resize(nbytes, 0u8);
             rdr.read_exact(&mut values).map_err(|source| JaError::Io {
                 path: path.to_path_buf(),
                 source,
             })?;
-            let count: usize = dims.iter().product();
-            let data = parse_values(&values, count).ok_or_else(|| JaError::ModelValue {
-                path: path.to_path_buf(),
-                name: name.to_owned(),
-            })?;
+            let data = if binary {
+                values
+                    .as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|bytes| f32::from_le_bytes(*bytes))
+                    .collect()
+            } else {
+                parse_values(&values, count).ok_or_else(|| JaError::ModelValue {
+                    path: path.to_path_buf(),
+                    name: name.to_owned(),
+                })?
+            };
             out.insert(name.to_owned(), RawParam { dims, data });
         } else {
             rdr.seek(SeekFrom::Current(nbytes as i64))
@@ -90,6 +141,30 @@ pub(crate) fn load(path: &Path, wanted: &[&str]) -> Result<HashMap<String, RawPa
         offset += nbytes as u64;
     }
     Ok(out)
+}
+
+#[cfg(all(test, feature = "bundled-model"))]
+mod tests {
+    #[test]
+    #[cfg_attr(
+        not(have_nagisa_dir),
+        ignore = "set NAGISA_RS_MODEL_DIR to compare original parameter bits"
+    )]
+    fn bundled_weights_match_every_original_f32_bit() {
+        let bundled = super::bundled().unwrap();
+        assert_eq!(bundled.len(), 28);
+        let names: Vec<_> = bundled.keys().map(String::as_str).collect();
+        let dir = std::env::var_os("NAGISA_RS_MODEL_DIR").unwrap();
+        let original = super::load(&super::model_path(std::path::Path::new(&dir)), &names).unwrap();
+        for (name, expected) in original {
+            let actual = &bundled[&name];
+            assert_eq!(actual.dims, expected.dims, "{name}");
+            assert_eq!(actual.data.len(), expected.data.len(), "{name}");
+            for (index, (got, want)) in actual.data.iter().zip(expected.data).enumerate() {
+                assert_eq!(got.to_bits(), want.to_bits(), "{name}[{index}]");
+            }
+        }
+    }
 }
 
 fn bad_header(path: &Path, offset: u64, raw: &[u8]) -> JaError {

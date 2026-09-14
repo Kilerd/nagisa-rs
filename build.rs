@@ -2,10 +2,9 @@
 //! the tests that need them can be `#[ignore]`d *with a reason* instead of
 //! silently returning `ok`.
 //!
-//! nagisa's weights are not in this repository, so from a fresh clone the
-//! differential test cannot run at all. Reporting that as a pass is how a
-//! Unicode-table bug survived a green test run once already; reporting it as
-//! `ignored, set NAGISA_RS_MODEL_DIR ...` does not.
+//! Model parity runs with the default bundled model or an explicit original
+//! model directory. Only original-file comparisons and Unicode audits need
+//! additional local data. This script performs no downloads or model generation.
 
 fn main() {
     for var in [

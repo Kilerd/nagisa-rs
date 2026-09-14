@@ -13,15 +13,18 @@ pub struct TaggedText {
 /// Japanese segmentation and POS tagging with nagisa 0.2.11's original model.
 ///
 /// Immutable, `Send + Sync`, and reentrant. Use [`JaSegmenter`] if only words
-/// are needed; it does not load the POS dictionary or network parameters.
+/// are needed; it does not retain the POS dictionary or network parameters.
 ///
-/// ```no_run
+/// ```
+/// # #[cfg(feature = "bundled-model")]
 /// # fn main() -> Result<(), nagisa_rs::JaError> {
-/// let tagger = nagisa_rs::Tagger::from_nagisa_dir("models/nagisa-0.2.11")?;
+/// let tagger = nagisa_rs::Tagger::new()?;
 /// let result = tagger.tagging("Pythonで簡単に使えるツールです");
 /// assert_eq!(result.postags, ["名詞", "助詞", "形状詞", "助動詞", "動詞", "名詞", "助動詞"]);
 /// # Ok(())
 /// # }
+/// # #[cfg(not(feature = "bundled-model"))]
+/// # fn main() {}
 /// ```
 pub struct Tagger {
     segmenter: JaSegmenter,
@@ -41,6 +44,24 @@ impl std::fmt::Debug for Tagger {
 }
 
 impl Tagger {
+    /// Load bundled segmentation and POS data without file or network access.
+    /// Available with the default `bundled-model` feature. Load once and reuse.
+    ///
+    /// # Errors
+    /// Returns [`JaError`] if bundled data cannot be decoded or validated.
+    #[cfg(feature = "bundled-model")]
+    pub fn new() -> Result<Self, JaError> {
+        let (words, vocab) = pickle::parse_tagging_vocabs(&crate::bundled_dictionary()?)?;
+        let mut params = dynet::bundled()?;
+        let path = Path::new("bundled/nagisa_v001.bin.gz");
+        let segmenter = JaSegmenter {
+            vocab: crate::vocab_from(words)?,
+            weights: crate::weights_from(&mut params, path)?,
+            dictionary: crate::dictionary::Dictionary::default(),
+        };
+        Self::from_parts(segmenter, vocab, weights_from(&mut params, path)?)
+    }
+
     /// Load segmentation and POS parameters from the original nagisa data directory.
     ///
     /// # Errors
@@ -53,6 +74,14 @@ impl Tagger {
             weights: crate::load_weights(dir)?,
             dictionary: crate::dictionary::Dictionary::default(),
         };
+        Self::from_parts(segmenter, vocab, load_weights(dir)?)
+    }
+
+    fn from_parts(
+        segmenter: JaSegmenter,
+        vocab: pickle::PosVocabs,
+        weights: pos::PosWeights,
+    ) -> Result<Self, JaError> {
         let mut labels = vec![String::new(); pos::N_TAGS];
         for (label, &id) in &vocab.pos2id {
             let slot = labels
@@ -96,7 +125,6 @@ impl Tagger {
                 return Err(JaError::InvalidVocab(name));
             }
         }
-        let weights = load_weights(dir)?;
         Ok(Self {
             segmenter,
             vocab,
@@ -252,39 +280,46 @@ fn select(tagged: TaggedText, labels: &[&str], keep: bool) -> TaggedText {
     TaggedText { words, postags }
 }
 
+// Static names also appear in JaError::ModelMissing/ModelShape.
+const NAMES: [[&str; 3]; 4] = [
+    [
+        "/birnn_1/vanilla-lstm-builder/_0",
+        "/birnn_1/vanilla-lstm-builder/_1",
+        "/birnn_1/vanilla-lstm-builder/_2",
+    ],
+    [
+        "/birnn_1/vanilla-lstm-builder_1/_0",
+        "/birnn_1/vanilla-lstm-builder_1/_1",
+        "/birnn_1/vanilla-lstm-builder_1/_2",
+    ],
+    [
+        "/birnn_2/vanilla-lstm-builder/_0",
+        "/birnn_2/vanilla-lstm-builder/_1",
+        "/birnn_2/vanilla-lstm-builder/_2",
+    ],
+    [
+        "/birnn_2/vanilla-lstm-builder_1/_0",
+        "/birnn_2/vanilla-lstm-builder_1/_1",
+        "/birnn_2/vanilla-lstm-builder_1/_2",
+    ],
+];
 fn load_weights(dir: &Path) -> Result<pos::PosWeights, JaError> {
-    // Static names also appear in JaError::ModelMissing/ModelShape.
-    const NAMES: [[&str; 3]; 4] = [
-        [
-            "/birnn_1/vanilla-lstm-builder/_0",
-            "/birnn_1/vanilla-lstm-builder/_1",
-            "/birnn_1/vanilla-lstm-builder/_2",
-        ],
-        [
-            "/birnn_1/vanilla-lstm-builder_1/_0",
-            "/birnn_1/vanilla-lstm-builder_1/_1",
-            "/birnn_1/vanilla-lstm-builder_1/_2",
-        ],
-        [
-            "/birnn_2/vanilla-lstm-builder/_0",
-            "/birnn_2/vanilla-lstm-builder/_1",
-            "/birnn_2/vanilla-lstm-builder/_2",
-        ],
-        [
-            "/birnn_2/vanilla-lstm-builder_1/_0",
-            "/birnn_2/vanilla-lstm-builder_1/_1",
-            "/birnn_2/vanilla-lstm-builder_1/_2",
-        ],
-    ];
     let path = dynet::model_path(dir);
     let mut wanted = vec!["/_4", "/_8", "/_9"];
     wanted.extend(NAMES.iter().flatten().copied());
     let mut params = dynet::load(&path, &wanted)?;
+    weights_from(&mut params, &path)
+}
+
+fn weights_from(
+    params: &mut std::collections::HashMap<String, dynet::RawParam>,
+    path: &Path,
+) -> Result<pos::PosWeights, JaError> {
     let mut lstm = |names: [&'static str; 3], input, hidden| -> Result<Lstm, JaError> {
         Ok(Lstm {
-            wx: dynet::take(&mut params, &path, names[0], &[hidden * 4, input])?,
-            wh: dynet::take(&mut params, &path, names[1], &[hidden * 4, hidden])?,
-            b: dynet::take(&mut params, &path, names[2], &[hidden * 4])?,
+            wx: dynet::take(params, path, names[0], &[hidden * 4, input])?,
+            wh: dynet::take(params, path, names[1], &[hidden * 4, hidden])?,
+            b: dynet::take(params, path, names[2], &[hidden * 4])?,
         })
     };
     let fwd = lstm(NAMES[0], 64, 50)?;
@@ -292,9 +327,9 @@ fn load_weights(dir: &Path) -> Result<pos::PosWeights, JaError> {
     let char_fwd = lstm(NAMES[2], 32, 16)?;
     let char_bwd = lstm(NAMES[3], 32, 16)?;
     Ok(pos::PosWeights {
-        tags: dynet::take(&mut params, &path, "/_4", &[16, pos::N_TAGS])?,
-        output: dynet::take(&mut params, &path, "/_8", &[pos::N_TAGS, 100])?,
-        bias: dynet::take(&mut params, &path, "/_9", &[pos::N_TAGS])?,
+        tags: dynet::take(params, path, "/_4", &[16, pos::N_TAGS])?,
+        output: dynet::take(params, path, "/_8", &[pos::N_TAGS, 100])?,
+        bias: dynet::take(params, path, "/_9", &[pos::N_TAGS])?,
         fwd,
         bwd,
         char_fwd,

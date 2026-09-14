@@ -9,12 +9,8 @@ struct Case {
     postags: Vec<String>,
 }
 
-fn tagger() -> Tagger {
-    Tagger::from_nagisa_dir(
-        std::env::var_os("NAGISA_RS_MODEL_DIR").expect("set NAGISA_RS_MODEL_DIR"),
-    )
-    .expect("load complete nagisa model")
-}
+mod common;
+use common::tagger;
 
 fn cases() -> Vec<Case> {
     let root = std::env::var_os("NAGISA_RS_FIXTURES").map_or_else(
@@ -52,7 +48,7 @@ fn cases() -> Vec<Case> {
 
 #[test]
 #[cfg_attr(
-    not(have_nagisa_dir),
+    not(any(have_nagisa_dir, feature = "bundled-model")),
     ignore = "set NAGISA_RS_MODEL_DIR for POS parity"
 )]
 fn tagging_matches_python() {
@@ -82,7 +78,7 @@ fn tagging_matches_python() {
 
 #[test]
 #[cfg_attr(
-    not(have_nagisa_dir),
+    not(any(have_nagisa_dir, feature = "bundled-model")),
     ignore = "set NAGISA_RS_MODEL_DIR for pre-tokenized POS parity"
 )]
 fn postagging_matches_python_and_rejects_empty_tokens() {
@@ -114,7 +110,7 @@ fn postagging_matches_python_and_rejects_empty_tokens() {
 
 #[test]
 #[cfg_attr(
-    not(have_nagisa_dir),
+    not(any(have_nagisa_dir, feature = "bundled-model")),
     ignore = "set NAGISA_RS_MODEL_DIR for concurrent POS parity"
 )]
 fn tagging_is_send_sync_and_reentrant() {

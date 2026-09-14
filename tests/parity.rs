@@ -5,8 +5,7 @@
 //!
 //! Environment:
 //! * `NAGISA_RS_MODEL_DIR` -- nagisa's `data/` directory (the one that
-//!   holds `nagisa_v001.model`). Every test here is skipped when it is unset,
-//!   because the weights are not in this repository.
+//!   holds `nagisa_v001.model`). When unset, use the bundled model.
 //! * `NAGISA_RS_FIXTURES` -- a `.jsonl` file or a directory of them.
 //!   Defaults to the committed subset in `tests/fixtures/`.
 
@@ -24,16 +23,7 @@ struct Case {
     words: Vec<String>,
 }
 
-/// nagisa's weights live in the installed package, not in this repository, so
-/// `build.rs` turns the env var into a cfg and the tests below are `#[ignore]`d
-/// with a reason when it is missing. This never returns `None` in a run that
-/// actually executes them.
-fn nagisa_dir() -> PathBuf {
-    PathBuf::from(
-        std::env::var_os("NAGISA_RS_MODEL_DIR")
-            .expect("NAGISA_RS_MODEL_DIR must be set for the model tests"),
-    )
-}
+mod common;
 
 fn fixture_files() -> Vec<PathBuf> {
     let root = std::env::var_os("NAGISA_RS_FIXTURES").map_or_else(
@@ -75,13 +65,12 @@ fn load_cases() -> Vec<Case> {
 }
 
 #[cfg_attr(
-    not(have_nagisa_dir),
+    not(any(have_nagisa_dir, feature = "bundled-model")),
     ignore = "needs nagisa's data/ dir: set NAGISA_RS_MODEL_DIR (see README.md)"
 )]
 #[test]
 fn words_match_nagisa_exactly() {
-    let dir = nagisa_dir();
-    let seg = JaSegmenter::from_nagisa_dir(&dir).expect("load nagisa model");
+    let seg = common::segmenter();
     let cases = load_cases();
     assert!(
         !cases.is_empty(),
@@ -115,13 +104,12 @@ fn words_match_nagisa_exactly() {
 }
 
 #[cfg_attr(
-    not(have_nagisa_dir),
+    not(any(have_nagisa_dir, feature = "bundled-model")),
     ignore = "needs nagisa's data/ dir: set NAGISA_RS_MODEL_DIR (see README.md)"
 )]
 #[test]
 fn probes() {
-    let dir = nagisa_dir();
-    let seg = JaSegmenter::from_nagisa_dir(&dir).expect("load nagisa model");
+    let seg = common::segmenter();
     let expect: &[(&str, &[&str])] = &[
         ("", &[]),
         ("a", &["a"]),
@@ -144,7 +132,7 @@ fn probes() {
 }
 
 #[cfg_attr(
-    not(have_nagisa_dir),
+    not(any(have_nagisa_dir, feature = "bundled-model")),
     ignore = "needs nagisa's data/ dir: set NAGISA_RS_MODEL_DIR (see README.md)"
 )]
 #[test]
@@ -152,8 +140,7 @@ fn is_send_sync_and_reentrant() {
     fn assert_send_sync<T: Send + Sync>() {}
     assert_send_sync::<JaSegmenter>();
 
-    let dir = nagisa_dir();
-    let seg = JaSegmenter::from_nagisa_dir(&dir).expect("load nagisa model");
+    let seg = common::segmenter();
     let cases = load_cases();
     let sample: Vec<&Case> = cases.iter().take(400).collect();
     let expected: Vec<Vec<String>> = sample.iter().map(|c| c.words.clone()).collect();
