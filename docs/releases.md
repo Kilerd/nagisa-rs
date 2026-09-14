@@ -60,8 +60,9 @@ Local preflight commands are also available:
 
 ```sh
 python3 .github/scripts/release.py check --tag v0.1.0
-cargo publish --workspace --dry-run --locked
+cargo package --workspace --locked
 python3 tools/check_package.py
+cargo publish --workspace --dry-run --locked --no-verify
 ```
 
 Use CPython 3.12 or newer for the release helper. The tag must be exactly

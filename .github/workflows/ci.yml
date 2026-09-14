@@ -153,7 +153,9 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - name: Dry-run publishing both crates
-        run: cargo publish --workspace --dry-run --locked
+      - name: Package and verify both crates
+        run: cargo package --workspace --locked
       - name: Verify package sizes and offline consumer
         run: python tools/check_package.py
+      - name: Dry-run registry publication of the verified workspace
+        run: cargo publish --workspace --dry-run --locked --no-verify
