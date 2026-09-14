@@ -1,0 +1,24 @@
+nagisa-rs
+
+The Rust implementation was extracted from aligner-rust-ja in
+fishaudio/apex-fish-inference PR #84, at commit
+46879e4b0d8224019f1a6f39e62baa3d599a8de4:
+https://github.com/fishaudio/apex-fish-inference/pull/84
+https://github.com/fishaudio/apex-fish-inference/tree/46879e4b0d8224019f1a6f39e62baa3d599a8de4/aligner-rust/crates/aligner-rust-ja
+Its workspace declares the Apache License, Version 2.0, retained here.
+Standalone packaging, documentation, examples and maintenance tools were
+adapted for this repository; the segmentation algorithm is retained.
+
+This is a port of the word-segmentation component of nagisa 0.2.11,
+originally implemented in Python/Cython using DyNet by Taishi Ikeda
+(taishi-i) and contributors:
+https://github.com/taishi-i/nagisa
+https://pypi.org/project/nagisa/0.2.11/
+Copyright (c) 2018 taishi-i
+The upstream MIT license is reproduced in licenses/nagisa-MIT.txt.
+The pretrained dictionary and model are supplied separately by nagisa;
+they are not bundled in this repository or the Rust package.
+
+Unicode normalization and casing tables were generated from CPython
+3.12.14 (Unicode 15.0.0). The Unicode data license is reproduced in
+licenses/Unicode-3.0.txt.
