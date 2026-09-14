@@ -23,7 +23,7 @@ enum Mode {
 struct Measurement {
     text: String,
     words: Vec<String>,
-    postags: Vec<String>,
+    postags: Vec<&'static str>,
     samples_us: Vec<f64>,
 }
 fn main() -> Result<(), Box<dyn std::error::Error>> {
@@ -87,7 +87,11 @@ fn measure(request: Request, infer: impl Fn(&str) -> TaggedText) -> Vec<Measurem
         measurements.push(Measurement {
             text,
             words: result.words,
-            postags: result.postags,
+            postags: result
+                .postags
+                .into_iter()
+                .map(ragisa::PosTag::as_str)
+                .collect(),
             samples_us,
         });
     }

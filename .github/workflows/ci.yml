@@ -56,6 +56,7 @@ jobs:
           python tools/pos_reference.py results/pos
           cmp tests/fixtures/pos_candidates.json results/pos/pos_candidates.json
           cmp tests/fixtures/pos_tokens.json results/pos/pos_tokens.json
+          cmp tests/fixtures/pos_labels.json results/pos/pos_labels.json
       - name: Verify inference option references
         run: |
           python tools/options_reference.py results/options.json

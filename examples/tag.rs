@@ -13,9 +13,10 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut out = std::io::BufWriter::new(std::io::stdout().lock());
     for line in std::io::stdin().lock().lines() {
         let result = tagger.tagging(&line?);
+        let postags: Vec<_> = result.postags.iter().map(|tag| tag.as_str()).collect();
         serde_json::to_writer(
             &mut out,
-            &serde_json::json!({"words": result.words, "postags": result.postags}),
+            &serde_json::json!({"words": result.words, "postags": postags}),
         )?;
         writeln!(out)?;
     }

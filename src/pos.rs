@@ -1,7 +1,7 @@
 //! nagisa 0.2.11 POS inference: word/character/tag features → BiLSTM → softmax.
 use crate::infer::{DIM_UNI, DIM_WORD, Lstm, Vocab, Weights, gemv_acc, sigmoid};
 
-pub(crate) const N_TAGS: usize = 24;
+pub(crate) const N_TAGS: usize = crate::PosTag::ALL.len();
 pub(crate) const DIM_TAG: usize = 16;
 const INPUT: usize = DIM_WORD + DIM_UNI + DIM_TAG;
 const HIDDEN: usize = 50;

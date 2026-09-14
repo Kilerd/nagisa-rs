@@ -22,12 +22,13 @@ API compatibility with every nagisa release.
 - [x] **Word segmentation** — equivalent to `nagisa.wakati(text)` and
   `nagisa.tagging(text).words`, via `JaSegmenter::words()` or `Tagger::words()`.
 - [x] **Word segmentation + POS tagging** — `Tagger::tagging()` returns
-  `TaggedText { words, postags }`, targeting both fields of `nagisa.tagging(text)`.
+  `TaggedText { words, postags: Vec<PosTag> }`, targeting both fields of
+  `nagisa.tagging(text)` with typed POS labels.
 - [x] **POS tagging of pre-segmented words** — `Tagger::postagging()` targets
   `nagisa.postagging(words)` / `nagisa.decode(words)`, including normalization
   and the default noun heuristic. Tokens that become empty return a Rust error.
 - [x] **Available POS labels** — `Tagger::postags()` exposes the original
-  model's 24 labels in numeric ID order, including `oov`.
+  model's 24 `PosTag` variants in numeric ID order, including `PosTag::Oov`.
 - [x] **Original pretrained model** — the bundled dictionary and lossless
   f32 weights are available through `new()`. `from_nagisa_dir()` also loads
   the original `nagisa_v001.dict` and `nagisa_v001.model` without conversion.
@@ -77,16 +78,34 @@ fn main() -> Result<(), ragisa::JaError> {
 For word segmentation **and** POS tags:
 
 ```rust
-use ragisa::Tagger;
+use ragisa::{PosTag, Tagger};
 
 fn main() -> Result<(), ragisa::JaError> {
     let tagger = Tagger::new()?;
     let result = tagger.tagging("Pythonで簡単に使えるツールです");
-    assert_eq!(result.postags, ["名詞", "助詞", "形状詞", "助動詞", "動詞", "名詞", "助動詞"]);
+    assert_eq!(result.postags, [
+        PosTag::Noun,
+        PosTag::Particle,
+        PosTag::AdjectivalNoun,
+        PosTag::AuxiliaryVerb,
+        PosTag::Verb,
+        PosTag::Noun,
+        PosTag::AuxiliaryVerb,
+    ]);
     assert_eq!(tagger.postagging(&result.words)?, result.postags);
     Ok(())
 }
 ```
+
+POS APIs use the `Copy + Eq + Hash` enum `PosTag`: `TaggedText::postags` and
+`postagging()` return `Vec<PosTag>`, while `filter()` and `extract()` accept
+`&[PosTag]`. Use variants such as `PosTag::Noun` in comparisons and `match`
+expressions. `PosTag::ALL` lists all 24 labels in original model ID order.
+
+`PosTag::Noun.as_str()` and `PosTag::Noun.to_string()` produce `"名詞"`.
+`"助詞".parse::<PosTag>()` returns `Ok(PosTag::Particle)`; unrecognized labels
+return `ParsePosTagError`. `PosTag::Oov` (`oov`) and `PosTag::UnknownWord`
+(`未知語`) remain distinct. The JSON examples retain the original label strings.
 
 `postagging()` returns `JaError::EmptyToken { index }` for an input token that
 normalizes to an empty string, where Python's character encoder raises an
@@ -132,7 +151,7 @@ data-directory argument to either CLI example selects the external loader.
 ### Casing, user dictionaries and POS selection
 
 ```rust
-use ragisa::{Tagger, TextOptions};
+use ragisa::{PosTag, Tagger, TextOptions};
 
 fn main() -> Result<(), ragisa::JaError> {
     let tagger = Tagger::new()?
@@ -141,8 +160,11 @@ fn main() -> Result<(), ragisa::JaError> {
     assert_eq!(tagger.words_with_options("Python", lower), ["python"]);
     assert_eq!(tagger.words("東京大学"), ["東京大学"]);
 
-    let nouns = tagger.extract("東京大学でPythonを学ぶ。", &["名詞"]);
-    let content = tagger.filter("東京大学でPythonを学ぶ。", &["助詞", "補助記号"]);
+    let nouns = tagger.extract("東京大学でPythonを学ぶ。", &[PosTag::Noun]);
+    let content = tagger.filter(
+        "東京大学でPythonを学ぶ。",
+        &[PosTag::Particle, PosTag::SupplementarySymbol],
+    );
     println!("{nouns:?}\n{content:?}");
     Ok(())
 }
@@ -152,8 +174,9 @@ fn main() -> Result<(), ragisa::JaError> {
 `words_with_options()`. `Tagger` also provides `tagging_with_options()`,
 `postagging_with_options()`, `filter_with_options()` and
 `extract_with_options()`. POS selection keeps the labels inferred with full
-sentence context and preserves word/tag alignment. Empty or unknown label
-lists remove nothing in `filter()` and retain nothing in `extract()`.
+sentence context and preserves word/tag alignment. Empty label lists remove
+nothing in `filter()` and retain nothing in `extract()`. Unknown label strings
+must be handled when parsing into `PosTag`; they cannot enter the typed API.
 
 Both types support the consuming `with_single_word_list()` builder; calling
 it again replaces the dictionary. Matching is case-sensitive on normalized
@@ -180,6 +203,9 @@ using the repository's release profile and no extra `RUSTFLAGS`, CPython
 **3.12.14**, nagisa **0.2.11**, DyNet38 **2.2**, and NumPy **2.5.3**.
 Both platforms used identical implementation, benchmark and model hashes.
 Speedup compares Python and Rust on the same CPU.
+These reports measure revision
+[`0b0be7b`](https://github.com/Kilerd/ragisa/commit/0b0be7b7f40372977c1091d406d81af014ac0e30),
+before the `PosTag` API change; the raw source hashes identify that snapshot.
 
 ### Apple M4
 
@@ -298,7 +324,7 @@ separate preprocessing test. See [fixture provenance](tests/fixtures/README.md).
 
 The current implementation was verified locally with **0 / 1,713 word
 mismatches and 0 / 1,713 POS mismatches**, including both types' 8-thread tests.
-All **27 tests** pass locally with the original model and exhaustive Unicode audit data enabled.
+All **30 tests** pass locally with the original model and exhaustive Unicode audit data enabled.
 
 CI runs on Linux and macOS, tests bundled loading before any model download,
 then verifies the original data, all f32 weight bits and the Unicode tables,

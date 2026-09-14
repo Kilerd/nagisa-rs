@@ -1,4 +1,4 @@
-use ragisa::{JaError, TaggedText, Tagger, TextOptions};
+use ragisa::{JaError, PosTag, TaggedText, Tagger, TextOptions};
 mod common;
 use serde::Deserialize;
 use std::sync::OnceLock;
@@ -12,7 +12,11 @@ struct Expected {
 impl Expected {
     fn check(&self, actual: TaggedText, context: &str) {
         assert_eq!(actual.words, self.words, "words: {context:?}");
-        assert_eq!(actual.postags, self.postags, "POS: {context:?}");
+        assert_eq!(
+            common::labels(&actual.postags),
+            self.postags,
+            "POS: {context:?}"
+        );
     }
 }
 
@@ -90,7 +94,20 @@ fn lowercase_matches_python_words_and_postags() {
 
 fn check_selection(tagger: &Tagger, case: &Selection) {
     let options = TextOptions { lower: case.lower };
-    let labels: Vec<_> = case.labels.iter().map(String::as_str).collect();
+    let labels: Vec<_> = case
+        .labels
+        .iter()
+        .filter_map(|label| {
+            if label == "unknown" {
+                // Upstream ignores this fixture label; the typed API rejects it
+                // at the text boundary instead of accepting an invalid POS value.
+                assert!(label.parse::<PosTag>().is_err());
+                None
+            } else {
+                Some(label.parse::<PosTag>().expect("known upstream label"))
+            }
+        })
+        .collect();
     case.expected
         .check(tagger.tagging_with_options(&case.text, options), &case.text);
     case.filtered.check(
@@ -145,7 +162,7 @@ fn dictionaries_match_python_with_normalization_and_casing() {
     not(any(have_nagisa_dir, feature = "bundled-model")),
     ignore = "set RAGISA_MODEL_DIR for POS selection parity"
 )]
-fn filter_and_extract_match_python_including_empty_and_unknown_labels() {
+fn filter_and_extract_match_python_with_typed_labels() {
     for case in &references().selections {
         check_selection(tagger(), case);
     }
@@ -159,9 +176,11 @@ fn filter_and_extract_match_python_including_empty_and_unknown_labels() {
 fn postagging_with_casing_matches_python() {
     for case in &references().postagging {
         assert_eq!(
-            tagger()
-                .postagging_with_options(&case.words, TextOptions { lower: case.lower })
-                .unwrap(),
+            common::labels(
+                &tagger()
+                    .postagging_with_options(&case.words, TextOptions { lower: case.lower })
+                    .unwrap()
+            ),
             case.postags,
             "{:?}, lower={}",
             case.words,

@@ -53,6 +53,7 @@ def main():
             '[patch.crates-io]\nragisa-model = { path = ' + json.dumps(str(extracted["ragisa-model"])) + ' }\n',
             encoding="utf-8")
         (consumer / "src/main.rs").write_text('''fn main() -> Result<(), ragisa::JaError> {
+    use ragisa::PosTag::{AdjectivalNoun, AuxiliaryVerb, Noun, Particle, Verb};
     let segmenter = ragisa::JaSegmenter::new()?;
     let tagger = ragisa::Tagger::new()?;
     let text = "Pythonで簡単に使えるツールです";
@@ -60,8 +61,11 @@ def main():
     assert_eq!(segmenter.words(text), expected);
     let tagged = tagger.tagging(text);
     assert_eq!(tagged.words, expected);
-    assert_eq!(tagged.postags, ["名詞", "助詞", "形状詞", "助動詞", "動詞", "名詞", "助動詞"]);
+    assert_eq!(tagged.postags, [Noun, Particle, AdjectivalNoun, AuxiliaryVerb, Verb, Noun, AuxiliaryVerb]);
     assert_eq!(tagger.postagging(&tagged.words)?, tagged.postags);
+    assert_eq!(tagger.extract(text, &[Noun]).words, ["Python", "ツール"]);
+    assert_eq!(Noun.as_str(), "名詞");
+    assert_eq!("助詞".parse::<ragisa::PosTag>().unwrap(), Particle);
     let tagger = tagger.with_single_word_list(["東京大学"]);
     assert_eq!(tagger.words("東京大学"), ["東京大学"]);
     assert_eq!(tagger.words_with_options("Python", ragisa::TextOptions { lower: true }), ["python"]);

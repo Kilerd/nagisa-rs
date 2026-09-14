@@ -96,7 +96,7 @@ cargo test --release --locked
 The scalar audit checks all **1,112,064 Unicode scalar values** (surrogates
 excluded). The sequence audit checks **1,112,064 × 85** (scalar, composing
 mark) pairs and **922 × 922** combining-mark orderings. Reference generation
-can take a few minutes. The full current suite contains fourteen unit tests, eleven integration tests and
+can take a few minutes. The full current suite contains seventeen unit tests, eleven integration tests and
 two documentation tests. Both `JaSegmenter` and `Tagger` have model parity
 and 8-thread reentrancy coverage.
 
@@ -111,6 +111,20 @@ normalizes supplied words, preserves single-space tokens, and returns an
 `EmptyToken` error for empty normalized words. By default POS features use
 the original case of each token, independently of segmentation's lowercase
 features. `TextOptions { lower: true }` also lowercases POS input tokens.
+
+POS outputs and selection inputs use `PosTag`. Its 24 variants correspond
+one-to-one to the original model's numeric IDs; model loading validates the
+complete label-to-ID mapping before inference. `Oov` and `UnknownWord` are
+separate labels. `as_str()` / `Display` preserve the original text labels,
+and `FromStr` rejects unknown strings. JSON examples convert labels only at
+the output boundary, outside benchmark timing.
+
+`pos_labels.json` is generated from `nagisa.tagger.postags` alongside the POS
+reference fixtures. Tests check all enum labels and their order against this
+Python reference, then compare inferred enum values as text against the
+unchanged Python word/POS and option fixtures. The selection fixture's
+deliberately invalid `unknown` label is checked for a parse error and omitted
+by the test adapter; upstream ignores it, while Rust requires typed inputs.
 
 The original `char_seq_model.transduce(chars)[-1]` selects the last original
 character position. Its forward state covers the whole word; its backward
@@ -191,6 +205,9 @@ Check the change in `nr_throttled` and `throttled_usec` before interpreting
 container results. Affinity does not reserve a physical core; shared-host
 contention can still affect timing. Keep infrastructure identifiers out of
 public reports.
+
+The 2026-09-14 reports are pinned to revision `0b0be7b`, before the typed POS
+API. Keep their source hashes intact; rerun the tool to measure later code.
 
 Loading and inference have different scopes. Python imports the full
 upstream package/model; Rust initializes a `JaSegmenter` or `Tagger` from

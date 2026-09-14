@@ -1,4 +1,4 @@
-use ragisa::{JaError, Tagger};
+use ragisa::{JaError, PosTag, Tagger};
 use serde::Deserialize;
 use std::path::{Path, PathBuf};
 
@@ -10,7 +10,7 @@ struct Case {
 }
 
 mod common;
-use common::tagger;
+use common::{labels, tagger};
 
 fn cases() -> Vec<Case> {
     let root = std::env::var_os("RAGISA_FIXTURES").map_or_else(
@@ -58,7 +58,7 @@ fn tagging_matches_python() {
     for case in &cases {
         let got = tagger.tagging(&case.text);
         assert_eq!(got.words, case.words, "word mismatch: {:?}", case.text);
-        if got.postags != case.postags {
+        if labels(&got.postags) != case.postags {
             mismatches.push(format!(
                 "{:?}\nwords: {:?}\nPython: {:?}\nRust: {:?}",
                 case.text, case.words, case.postags, got.postags
@@ -92,7 +92,7 @@ fn postagging_matches_python_and_rejects_empty_tokens() {
     let tagger = tagger();
     for case in cases {
         assert_eq!(
-            tagger.postagging(&case.words).unwrap(),
+            labels(&tagger.postagging(&case.words).unwrap()),
             case.postags,
             "{:?}",
             case.words
@@ -105,7 +105,8 @@ fn postagging_matches_python_and_rejects_empty_tokens() {
         ));
     }
     assert_eq!(tagger.postags().len(), 24);
-    assert_eq!(tagger.postags()[2], "名詞");
+    assert_eq!(tagger.postags(), PosTag::ALL);
+    assert_eq!(tagger.postags()[2], PosTag::Noun);
 }
 
 #[test]
@@ -128,7 +129,7 @@ fn tagging_is_send_sync_and_reentrant() {
                 for case in sample {
                     let got = tagger.tagging(&case.text);
                     assert_eq!(got.words, case.words);
-                    assert_eq!(got.postags, case.postags);
+                    assert_eq!(labels(&got.postags), case.postags);
                 }
             });
         }

@@ -1,4 +1,4 @@
-use crate::{JaError, JaSegmenter, TextOptions, dynet, infer::Lstm, pickle, pos};
+use crate::{JaError, JaSegmenter, PosTag, TextOptions, dynet, infer::Lstm, pickle, pos};
 use std::path::Path;
 
 /// Normalized words and their corresponding part-of-speech labels.
@@ -6,8 +6,8 @@ use std::path::Path;
 pub struct TaggedText {
     /// Word segmentation, in text order.
     pub words: Vec<String>,
-    /// One POS label for each word, in the same order.
-    pub postags: Vec<String>,
+    /// One typed POS label for each word, in the same order.
+    pub postags: Vec<PosTag>,
 }
 
 /// Japanese segmentation and POS tagging with nagisa 0.2.11's original model.
@@ -18,9 +18,11 @@ pub struct TaggedText {
 /// ```
 /// # #[cfg(feature = "bundled-model")]
 /// # fn main() -> Result<(), ragisa::JaError> {
+/// use ragisa::PosTag::{AdjectivalNoun, AuxiliaryVerb, Noun, Particle, Verb};
 /// let tagger = ragisa::Tagger::new()?;
 /// let result = tagger.tagging("Pythonで簡単に使えるツールです");
-/// assert_eq!(result.postags, ["名詞", "助詞", "形状詞", "助動詞", "動詞", "名詞", "助動詞"]);
+/// assert_eq!(result.postags, [Noun, Particle, AdjectivalNoun, AuxiliaryVerb, Verb, Noun, AuxiliaryVerb]);
+/// assert_eq!(tagger.extract("Pythonで簡単に使えるツールです", &[Noun]).words, ["Python", "ツール"]);
 /// # Ok(())
 /// # }
 /// # #[cfg(not(feature = "bundled-model"))]
@@ -29,7 +31,6 @@ pub struct TaggedText {
 pub struct Tagger {
     segmenter: JaSegmenter,
     vocab: pickle::PosVocabs,
-    labels: Vec<String>,
     weights: pos::PosWeights,
 }
 
@@ -37,7 +38,7 @@ impl std::fmt::Debug for Tagger {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Tagger")
             .field("segmenter", &self.segmenter)
-            .field("postags", &self.labels)
+            .field("postags", &self.postags())
             .field("pos_dictionary_words", &self.vocab.word2postags.len())
             .finish()
     }
@@ -82,21 +83,7 @@ impl Tagger {
         vocab: pickle::PosVocabs,
         weights: pos::PosWeights,
     ) -> Result<Self, JaError> {
-        let mut labels = vec![String::new(); pos::N_TAGS];
-        for (label, &id) in &vocab.pos2id {
-            let slot = labels
-                .get_mut(id as usize)
-                .ok_or(JaError::InvalidVocab("POS ID outside 0..24"))?;
-            if !slot.is_empty() {
-                return Err(JaError::InvalidVocab("duplicate POS ID"));
-            }
-            *slot = label.clone();
-        }
-        if labels.iter().any(String::is_empty) || labels[0] != "oov" || labels[2] != "名詞" {
-            return Err(JaError::InvalidVocab(
-                "expected nagisa 0.2.11's 24 POS labels",
-            ));
-        }
+        validate_pos_labels(&vocab.pos2id)?;
         if vocab
             .word2postags
             .values()
@@ -128,7 +115,6 @@ impl Tagger {
         Ok(Self {
             segmenter,
             vocab,
-            labels,
             weights,
         })
     }
@@ -174,7 +160,7 @@ impl Tagger {
     /// Exclude words with any listed POS label, matching `nagisa.filter()`.
     /// An empty label list retains all words.
     #[must_use]
-    pub fn filter(&self, text: &str, postags: &[&str]) -> TaggedText {
+    pub fn filter(&self, text: &str, postags: &[PosTag]) -> TaggedText {
         self.filter_with_options(text, postags, TextOptions::default())
     }
 
@@ -183,7 +169,7 @@ impl Tagger {
     pub fn filter_with_options(
         &self,
         text: &str,
-        postags: &[&str],
+        postags: &[PosTag],
         options: TextOptions,
     ) -> TaggedText {
         select(self.tagging_with_options(text, options), postags, false)
@@ -192,7 +178,7 @@ impl Tagger {
     /// Keep only words with a listed POS label, matching `nagisa.extract()`.
     /// An empty label list returns no words.
     #[must_use]
-    pub fn extract(&self, text: &str, postags: &[&str]) -> TaggedText {
+    pub fn extract(&self, text: &str, postags: &[PosTag]) -> TaggedText {
         self.extract_with_options(text, postags, TextOptions::default())
     }
 
@@ -201,7 +187,7 @@ impl Tagger {
     pub fn extract_with_options(
         &self,
         text: &str,
-        postags: &[&str],
+        postags: &[PosTag],
         options: TextOptions,
     ) -> TaggedText {
         select(self.tagging_with_options(text, options), postags, true)
@@ -209,8 +195,8 @@ impl Tagger {
 
     /// Available POS labels, in upstream numeric ID order (including `oov`).
     #[must_use]
-    pub fn postags(&self) -> &[String] {
-        &self.labels
+    pub fn postags(&self) -> &[PosTag] {
+        &PosTag::ALL
     }
 
     /// Normalize and label already-segmented words like `nagisa.postagging(words)`.
@@ -219,7 +205,7 @@ impl Tagger {
     /// # Errors
     /// Returns [`JaError::EmptyToken`] if a token is empty after normalization.
     /// An empty input list is valid and returns an empty list of labels.
-    pub fn postagging<S: AsRef<str>>(&self, words: &[S]) -> Result<Vec<String>, JaError> {
+    pub fn postagging<S: AsRef<str>>(&self, words: &[S]) -> Result<Vec<PosTag>, JaError> {
         self.postagging_with_options(words, TextOptions::default())
     }
 
@@ -232,7 +218,7 @@ impl Tagger {
         &self,
         words: &[S],
         options: TextOptions,
-    ) -> Result<Vec<String>, JaError> {
+    ) -> Result<Vec<PosTag>, JaError> {
         let mut normalized = Vec::with_capacity(words.len());
         for (index, word) in words.iter().enumerate() {
             let word = word.as_ref();
@@ -255,7 +241,7 @@ impl Tagger {
         Ok(self.label_words(&normalized))
     }
 
-    fn label_words(&self, words: &[String]) -> Vec<String> {
+    fn label_words(&self, words: &[String]) -> Vec<PosTag> {
         pos::infer(
             &self.segmenter.vocab,
             &self.segmenter.weights,
@@ -264,20 +250,34 @@ impl Tagger {
             words,
         )
         .into_iter()
-        .map(|id| self.labels[id].clone())
+        .map(|id| PosTag::ALL[id])
         .collect()
     }
 }
 
 // Select AFTER tagging the full sentence, preserving contextual POS labels.
-fn select(tagged: TaggedText, labels: &[&str], keep: bool) -> TaggedText {
+fn select(tagged: TaggedText, labels: &[PosTag], keep: bool) -> TaggedText {
     let (words, postags) = tagged
         .words
         .into_iter()
         .zip(tagged.postags)
-        .filter(|(_, tag)| labels.contains(&tag.as_str()) == keep)
+        .filter(|(_, tag)| labels.contains(tag) == keep)
         .unzip();
     TaggedText { words, postags }
+}
+
+fn validate_pos_labels(labels: &crate::hash::FxMap<String, u32>) -> Result<(), JaError> {
+    if labels.len() != PosTag::ALL.len()
+        || PosTag::ALL
+            .iter()
+            .enumerate()
+            .any(|(id, tag)| labels.get(tag.as_str()) != Some(&(id as u32)))
+    {
+        return Err(JaError::InvalidVocab(
+            "expected nagisa 0.2.11's 24 POS labels in original ID order",
+        ));
+    }
+    Ok(())
 }
 
 // Static names also appear in JaError::ModelMissing/ModelShape.
@@ -335,4 +335,35 @@ fn weights_from(
         char_fwd,
         char_bwd,
     })
+}
+
+#[cfg(test)]
+mod label_tests {
+    use super::*;
+
+    #[test]
+    fn rejects_incompatible_label_ids() {
+        let original: Vec<String> =
+            serde_json::from_str(include_str!("../tests/fixtures/pos_labels.json")).unwrap();
+        let labels: crate::hash::FxMap<_, _> = original
+            .into_iter()
+            .enumerate()
+            .map(|(id, label)| (label, id as u32))
+            .collect();
+        validate_pos_labels(&labels).unwrap();
+        let mut unknown = labels.clone();
+        unknown.remove("動詞");
+        unknown.insert("unknown".into(), 6);
+        assert!(validate_pos_labels(&unknown).is_err());
+        let mut swapped = labels.clone();
+        swapped.insert("動詞".into(), 4);
+        swapped.insert("助詞".into(), 6);
+        assert!(validate_pos_labels(&swapped).is_err());
+        let mut duplicate = labels.clone();
+        duplicate.insert("助詞".into(), 6);
+        assert!(validate_pos_labels(&duplicate).is_err());
+        let mut missing = labels;
+        missing.remove("名詞");
+        assert!(validate_pos_labels(&missing).is_err());
+    }
 }

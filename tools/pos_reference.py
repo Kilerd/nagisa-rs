@@ -38,7 +38,8 @@ def main():
     ]
     tokens = [{"words": words, "postags": nagisa.postagging(words)} for words in inputs]
     args.output.mkdir(parents=True, exist_ok=True)
-    for name, data in (("pos_candidates.json", cases), ("pos_tokens.json", tokens)):
+    for name, data in (("pos_candidates.json", cases), ("pos_tokens.json", tokens),
+                       ("pos_labels.json", nagisa.tagger.postags)):
         (args.output / name).write_text(json.dumps(data, ensure_ascii=False, separators=(",", ":")) + "\n", encoding="utf-8")
         print(f"wrote {len(data)} references to {args.output / name}")
 

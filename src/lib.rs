@@ -36,6 +36,7 @@ mod nfkc;
 mod nfkd_tables;
 mod pickle;
 mod pos;
+mod pos_tag;
 mod pos_unicode_tables;
 mod prepro;
 mod tagger;
@@ -45,6 +46,7 @@ use std::io::Read;
 use std::path::Path;
 
 pub use error::JaError;
+pub use pos_tag::{ParsePosTagError, PosTag};
 pub use tagger::{TaggedText, Tagger};
 
 use infer::{

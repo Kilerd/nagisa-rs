@@ -1,5 +1,9 @@
 #![allow(dead_code)]
 
+pub fn labels(tags: &[ragisa::PosTag]) -> Vec<&'static str> {
+    tags.iter().map(|tag| tag.as_str()).collect()
+}
+
 pub fn segmenter() -> ragisa::JaSegmenter {
     if let Some(dir) = std::env::var_os("RAGISA_MODEL_DIR") {
         return ragisa::JaSegmenter::from_nagisa_dir(dir).expect("load original model");
