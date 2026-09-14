@@ -384,10 +384,9 @@ then verifies the original data, all f32 weight bits and the Unicode tables,
 runs the scalar Unicode audit, regenerates word/POS, inference-option and candidate-feature
 Python references, and checks the
 packaged crates. It also checks the external-only build and offline use of
-the distributed packages. A separate Linux/macOS job checks the thread benchmark
-with CPython 3.12 and 3.14t, including both explicit GIL states. CI checks output
-parity and the measurement protocol; it does not enforce timing thresholds on
-shared runners. The slower combining-sequence sweep is available locally.
+the distributed packages. The multithread benchmark is run manually with the
+documented Python environments; it has no separate CI job. The slower
+combining-sequence sweep is available locally.
 See [maintenance and Unicode audits](docs/maintenance.md).
 
 ## License and acknowledgements

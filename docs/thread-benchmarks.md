@@ -171,8 +171,9 @@ select a different 3.12 executable. `--mode words` or `--mode tagging` limits
 the tasks. `--cpus 16,17,18,19,20,21,22,23` selects a Linux CPU affinity pool
 for every worker process and thread. Choose CPUs appropriate to your machine;
 affinity does not reserve cores. Do not run competing builds/tests during
-measurement. `--lines 64 --runs 1 --warmup 2` is the CI correctness smoke
-configuration, not a performance measurement.
+measurement. `--lines 64 --runs 1 --warmup 2` performs a quick manual
+correctness smoke check, not a performance measurement. This benchmark has
+no separate CI job.
 
 To render the standalone chart (Matplotlib 3.11.2 was used for the published SVGs):
 

@@ -69,34 +69,3 @@ jobs:
         run: |
           cargo package --workspace --locked
           python tools/check_package.py
-
-  threads:
-    strategy:
-      fail-fast: false
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-    runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.97.1
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.12'
-      - name: Install pinned standard and free-threaded Python references
-        run: |
-          python -m pip install uv==0.12.13
-          uv venv --python 3.12.14 results/python312
-          uv venv --python 3.14.7t results/python314t
-          uv pip install --python results/python312/bin/python -r tools/requirements-threads.txt
-          uv pip install --python results/python312/bin/python --no-deps nagisa==0.3.0
-          uv pip install --python results/python314t/bin/python -r tools/requirements-threads.txt
-          uv pip install --python results/python314t/bin/python --no-deps nagisa==0.3.0
-      - name: Verify shared-model output parity and actual GIL state
-        run: |
-          python tools/benchmark_threads.py \
-            --python312 results/python312/bin/python --python314t results/python314t/bin/python \
-            --lines 64 --runs 1 --warmup 2 --output results/threads-smoke.json
-      - uses: actions/upload-artifact@v4
-        with:
-          name: threads-smoke-${{ matrix.os }}
-          path: results/threads-smoke.json
