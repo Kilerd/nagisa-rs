@@ -1,4 +1,4 @@
-use crate::{JaError, JaSegmenter, dynet, infer::Lstm, pickle, pos};
+use crate::{JaError, JaSegmenter, TextOptions, dynet, infer::Lstm, pickle, pos};
 use std::path::Path;
 
 /// Normalized words and their corresponding part-of-speech labels.
@@ -51,6 +51,7 @@ impl Tagger {
         let segmenter = JaSegmenter {
             vocab: crate::vocab_from(words)?,
             weights: crate::load_weights(dir)?,
+            dictionary: crate::dictionary::Dictionary::default(),
         };
         let mut labels = vec![String::new(); pos::N_TAGS];
         for (label, &id) in &vocab.pos2id {
@@ -107,15 +108,75 @@ impl Tagger {
     /// Segment and label text, targeting `nagisa.tagging(text).words/postags`.
     #[must_use]
     pub fn tagging(&self, text: &str) -> TaggedText {
-        let words = self.words(text);
-        let postags = self.label_words(&words);
-        TaggedText { words, postags }
+        self.tagging_with_options(text, TextOptions::default())
     }
 
     /// Segment text without running the POS network.
     #[must_use]
     pub fn words(&self, text: &str) -> Vec<String> {
         self.segmenter.words(text)
+    }
+
+    /// Segment with explicit output casing, without running POS inference.
+    #[must_use]
+    pub fn words_with_options(&self, text: &str, options: TextOptions) -> Vec<String> {
+        self.segmenter.words_with_options(text, options)
+    }
+
+    /// Segment and label with explicit casing, matching `tagging(text, lower=...)`.
+    #[must_use]
+    pub fn tagging_with_options(&self, text: &str, options: TextOptions) -> TaggedText {
+        let words = self.words_with_options(text, options);
+        let postags = self.label_words(&words);
+        TaggedText { words, postags }
+    }
+
+    /// Replace the user dictionary. See [`JaSegmenter::with_single_word_list`]
+    /// for normalization, longest-match behavior and literal matching semantics.
+    #[must_use]
+    pub fn with_single_word_list<I, S>(mut self, words: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.segmenter = self.segmenter.with_single_word_list(words);
+        self
+    }
+
+    /// Exclude words with any listed POS label, matching `nagisa.filter()`.
+    /// An empty label list retains all words.
+    #[must_use]
+    pub fn filter(&self, text: &str, postags: &[&str]) -> TaggedText {
+        self.filter_with_options(text, postags, TextOptions::default())
+    }
+
+    /// Exclude listed POS labels with explicit output casing.
+    #[must_use]
+    pub fn filter_with_options(
+        &self,
+        text: &str,
+        postags: &[&str],
+        options: TextOptions,
+    ) -> TaggedText {
+        select(self.tagging_with_options(text, options), postags, false)
+    }
+
+    /// Keep only words with a listed POS label, matching `nagisa.extract()`.
+    /// An empty label list returns no words.
+    #[must_use]
+    pub fn extract(&self, text: &str, postags: &[&str]) -> TaggedText {
+        self.extract_with_options(text, postags, TextOptions::default())
+    }
+
+    /// Keep only listed POS labels with explicit output casing.
+    #[must_use]
+    pub fn extract_with_options(
+        &self,
+        text: &str,
+        postags: &[&str],
+        options: TextOptions,
+    ) -> TaggedText {
+        select(self.tagging_with_options(text, options), postags, true)
     }
 
     /// Available POS labels, in upstream numeric ID order (including `oov`).
@@ -131,6 +192,19 @@ impl Tagger {
     /// Returns [`JaError::EmptyToken`] if a token is empty after normalization.
     /// An empty input list is valid and returns an empty list of labels.
     pub fn postagging<S: AsRef<str>>(&self, words: &[S]) -> Result<Vec<String>, JaError> {
+        self.postagging_with_options(words, TextOptions::default())
+    }
+
+    /// Label pre-segmented words with explicit casing, matching
+    /// `nagisa.postagging(words, lower=...)`. Lowercase context is per token.
+    ///
+    /// # Errors
+    /// Returns [`JaError::EmptyToken`] for empty normalized input tokens.
+    pub fn postagging_with_options<S: AsRef<str>>(
+        &self,
+        words: &[S],
+        options: TextOptions,
+    ) -> Result<Vec<String>, JaError> {
         let mut normalized = Vec::with_capacity(words.len());
         for (index, word) in words.iter().enumerate() {
             let word = word.as_ref();
@@ -142,7 +216,13 @@ impl Tagger {
             if text.is_empty() {
                 return Err(JaError::EmptyToken { index });
             }
-            normalized.push(text);
+            normalized.push(if options.lower {
+                crate::prepro::lower(&text.chars().collect::<Vec<_>>())
+                    .into_iter()
+                    .collect()
+            } else {
+                text
+            });
         }
         Ok(self.label_words(&normalized))
     }
@@ -159,6 +239,17 @@ impl Tagger {
         .map(|id| self.labels[id].clone())
         .collect()
     }
+}
+
+// Select AFTER tagging the full sentence, preserving contextual POS labels.
+fn select(tagged: TaggedText, labels: &[&str], keep: bool) -> TaggedText {
+    let (words, postags) = tagged
+        .words
+        .into_iter()
+        .zip(tagged.postags)
+        .filter(|(_, tag)| labels.contains(&tag.as_str()) == keep)
+        .unzip();
+    TaggedText { words, postags }
 }
 
 fn load_weights(dir: &Path) -> Result<pos::PosWeights, JaError> {

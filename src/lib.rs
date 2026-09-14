@@ -24,6 +24,7 @@
 //! touches no globals, so it is `Send + Sync` and reentrant. (The Python
 //! original uses DyNet's process-global computation graph.)
 
+mod dictionary;
 mod dynet;
 mod error;
 mod hash;
@@ -55,10 +56,19 @@ const BWD_X: &str = "/birnn/vanilla-lstm-builder_1/_0";
 const BWD_H: &str = "/birnn/vanilla-lstm-builder_1/_1";
 const BWD_B: &str = "/birnn/vanilla-lstm-builder_1/_2";
 
+/// Per-call options shared by segmentation, tagging and POS selection APIs.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub struct TextOptions {
+    /// Return lowercase words and use lowercase tokens for POS features,
+    /// matching nagisa's `lower=True`. Defaults to false.
+    pub lower: bool,
+}
+
 /// nagisa's Japanese word segmenter.
 pub struct JaSegmenter {
     vocab: Vocab,
     weights: Weights,
+    dictionary: dictionary::Dictionary,
 }
 
 impl std::fmt::Debug for JaSegmenter {
@@ -85,7 +95,11 @@ impl JaSegmenter {
         let dir = dir.as_ref();
         let vocab = load_vocab(dir)?;
         let weights = load_weights(dir)?;
-        Ok(Self { vocab, weights })
+        Ok(Self {
+            vocab,
+            weights,
+            dictionary: dictionary::Dictionary::default(),
+        })
     }
 
     /// Segment text, targeting `nagisa.tagging(text).words` for nagisa 0.2.11
@@ -96,8 +110,37 @@ impl JaSegmenter {
     /// caller is responsible for any further filtering.
     #[must_use]
     pub fn words(&self, text: &str) -> Vec<String> {
+        self.words_with_options(text, TextOptions::default())
+    }
+
+    /// Segment with explicit output casing. Lowercase context is evaluated over
+    /// the entire normalized text before words are cut, matching Python.
+    #[must_use]
+    pub fn words_with_options(&self, text: &str, options: TextOptions) -> Vec<String> {
         let chars = prepro::preprocess(text);
-        infer::wakati(&self.vocab, &self.weights, &chars)
+        infer::wakati(
+            &self.vocab,
+            &self.weights,
+            &chars,
+            options.lower,
+            &self.dictionary,
+        )
+    }
+
+    /// Replace the user dictionary with literal, case-sensitive forced words.
+    ///
+    /// Terms are normalized like input text. Entries of at most one character
+    /// before normalization, and empty normalized entries, are ignored. At each
+    /// position the longest match wins, with no overlaps. Unlike Python nagisa's
+    /// partly escaped regex, regex metacharacters have their literal meaning.
+    #[must_use]
+    pub fn with_single_word_list<I, S>(mut self, words: I) -> Self
+    where
+        I: IntoIterator<Item = S>,
+        S: AsRef<str>,
+    {
+        self.dictionary = dictionary::Dictionary::new(words);
+        self
     }
 
     /// Number of entries in the unigram, bigram and word vocabularies.

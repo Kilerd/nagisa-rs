@@ -393,7 +393,13 @@ fn segment(chars: &[char], tags: &[usize]) -> Vec<String> {
 }
 
 /// Full `Tagger.wakati` for an already-preprocessed character sequence.
-pub(crate) fn wakati(vocab: &Vocab, w: &Weights, chars: &[char]) -> Vec<String> {
+pub(crate) fn wakati(
+    vocab: &Vocab,
+    w: &Weights,
+    chars: &[char],
+    lower_output: bool,
+    dictionary: &crate::dictionary::Dictionary,
+) -> Vec<String> {
     if chars.is_empty() {
         return Vec::new();
     }
@@ -409,6 +415,7 @@ pub(crate) fn wakati(vocab: &Vocab, w: &Weights, chars: &[char]) -> Vec<String> 
     let feats = extract(vocab, &low, &offs, &lowered);
     let xs = build_inputs(w, &feats, chars.len());
     let obs = observations(w, &xs, chars.len());
-    let tags = viterbi(&w.trans, &obs);
-    segment(chars, &tags)
+    let mut tags = viterbi(&w.trans, &obs);
+    dictionary.apply(chars, &mut tags);
+    segment(if lower_output { &lowered } else { chars }, &tags)
 }

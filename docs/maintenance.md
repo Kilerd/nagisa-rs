@@ -61,7 +61,7 @@ cargo test --release --locked
 The scalar audit checks all **1,112,064 Unicode scalar values** (surrogates
 excluded). The sequence audit checks **1,112,064 × 85** (scalar, composing
 mark) pairs and **922 × 922** combining-mark orderings. Reference generation
-can take a few minutes. The full current suite contains ten unit tests, six integration tests and
+can take a few minutes. The full current suite contains thirteen unit tests, eleven integration tests and
 two documentation tests. Both `JaSegmenter` and `Tagger` have model parity
 and 8-thread reentrancy coverage.
 
@@ -73,8 +73,9 @@ which a per-character lowercase operation cannot reproduce.
 
 `Tagger::tagging()` segments and labels normalized text. `Tagger::postagging()`
 normalizes supplied words, preserves single-space tokens, and returns an
-`EmptyToken` error for empty normalized words. POS features use the original
-case of each token, independently of segmentation's lowercase features.
+`EmptyToken` error for empty normalized words. By default POS features use
+the original case of each token, independently of segmentation's lowercase
+features. `TextOptions { lower: true }` also lowercases POS input tokens.
 
 The original `char_seq_model.transduce(chars)[-1]` selects the last original
 character position. Its forward state covers the whole word; its backward
@@ -94,6 +95,8 @@ Regenerate fixtures using the pinned reference environment:
 .venv/bin/python tools/reference.py \
   tests/fixtures/ja_parity_subset.jsonl results/tagging.jsonl
 .venv/bin/python tools/pos_reference.py results/pos
+.venv/bin/python tools/options_reference.py results/options.json
+cmp tests/fixtures/options.json results/options.json
 NAGISA_RS_FIXTURES="$PWD/results/tagging.jsonl" \
   cargo test --release --locked --test parity --test tagging
 ```
@@ -103,6 +106,27 @@ fixtures are committed and regenerated in CI. The 1,713 text fixtures now
 contain both `words` and `postags`; the original inputs and word outputs
 are preserved. Full POS inference, like segmentation, runs without Python
 or native numerical libraries.
+
+## Casing and dictionary behavior
+
+Segmentation lowercases the full normalized sentence before cutting words,
+so contextual final sigma must not be computed separately on each output
+token. `postagging_with_options()` instead lowercases each supplied token,
+matching upstream's pre-segmented API.
+
+`src/dictionary.rs` uses a literal trie to choose longest, leftmost,
+non-overlapping matches on the normalized text with its original casing.
+It forces BMES tags and repairs adjacent boundaries before words are cut.
+The dictionary builder replaces existing entries and inference only reads
+the trie. Regex syntax is not interpreted and empty normalized entries are
+ignored; these deliberate differences from nagisa 0.2.11 are documented
+in the README. Filtering and extraction run POS inference on the full
+sentence before selecting word/tag pairs.
+
+`tests/options.rs` checks casing against the entire text corpus, plus
+dictionary boundaries, overlap, normalization, POS selection, pre-segmented
+input and shared-instance concurrency. `tools/options_reference.py`
+regenerates all expected outputs from the pinned Python reference in CI.
 
 ## Benchmark maintenance
 

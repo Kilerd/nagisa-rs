@@ -31,10 +31,14 @@ API compatibility with every nagisa release.
   `nagisa_v001.model` directly, without conversion.
 - [x] **Default preprocessing** — CPython 3.12 whitespace removal, NFKC,
   `İ` → `I`, ASCII space → `U+3000`, and contextual lowercase features.
-- [ ] **Lowercase output option** — the upstream `lower=True` argument.
-- [ ] **User dictionary / forced single words** — `Tagger(single_word_list=...)`.
-- [ ] **Filter by POS** — `nagisa.filter(..., filter_postags=...)`.
-- [ ] **Extract by POS** — `nagisa.extract(..., extract_postags=...)`.
+- [x] **Lowercase output option** — `TextOptions { lower: true }` in the
+  `*_with_options()` methods targets the upstream `lower=True` argument.
+- [x] **User dictionary / forced single words** — `with_single_word_list()`
+  targets `Tagger(single_word_list=...)`, with literal matching as described below.
+- [x] **Filter by POS** — `Tagger::filter()` targets
+  `nagisa.filter(..., filter_postags=...)`.
+- [x] **Extract by POS** — `Tagger::extract()` targets
+  `nagisa.extract(..., extract_postags=...)`.
 - [ ] **Model training** — `nagisa.fit(...)` and training-data workflows.
 - [ ] **Custom trained models and hyperparameters** — custom `vocabs`, `params`
   and `hp` configurations; only the original 0.2.11 architecture is supported.
@@ -116,6 +120,50 @@ Only `nagisa_v001.dict` and `nagisa_v001.model` are needed. Model dimensions
 are fixed to the shipped nagisa 0.2.11 model; `.hp` is not read. Model files
 are distributed separately and are not embedded in the crate.
 
+### Casing, user dictionaries and POS selection
+
+```rust
+use nagisa_rs::{Tagger, TextOptions};
+
+fn main() -> Result<(), nagisa_rs::JaError> {
+    let tagger = Tagger::from_nagisa_dir("models/nagisa-0.2.11")?
+        .with_single_word_list(["東京大学", "C++"]);
+    let lower = TextOptions { lower: true };
+    assert_eq!(tagger.words_with_options("Python", lower), ["python"]);
+    assert_eq!(tagger.words("東京大学"), ["東京大学"]);
+
+    let nouns = tagger.extract("東京大学でPythonを学ぶ。", &["名詞"]);
+    let content = tagger.filter("東京大学でPythonを学ぶ。", &["助詞", "補助記号"]);
+    println!("{nouns:?}\n{content:?}");
+    Ok(())
+}
+```
+
+`TextOptions` defaults to `lower: false`. Both types support
+`words_with_options()`. `Tagger` also provides `tagging_with_options()`,
+`postagging_with_options()`, `filter_with_options()` and
+`extract_with_options()`. POS selection keeps the labels inferred with full
+sentence context and preserves word/tag alignment. Empty or unknown label
+lists remove nothing in `filter()` and retain nothing in `extract()`.
+
+Both types support the consuming `with_single_word_list()` builder; calling
+it again replaces the dictionary. Matching is case-sensitive on normalized
+text, before optional lowercasing, and takes the longest non-overlapping
+match at each position from left to right. Entries of at most one character
+before normalization are ignored, as in nagisa 0.2.11.
+
+**Dictionary compatibility:** Rust treats every entry literally, including
+regex metacharacters such as `+`, `.`, `[` and `|`. Upstream 0.2.11 only
+escapes parentheses before building a regex, so those metacharacters can
+behave differently. Rust also ignores entries that normalize to empty text.
+The dictionary parity fixtures cover literal entries, normalization,
+overlaps, boundaries, casing, and combinations with POS selection.
+
+Training and arbitrary custom models remain unimplemented. Training needs
+backpropagation, optimizers and data workflows; custom configurations need
+dynamic network dimensions and vocabulary/label handling beyond the shipped
+architecture.
+
 ## Performance against Python
 
 ### Word segmentation
@@ -126,9 +174,9 @@ hashes of the measured implementation.
 
 | Characters | Python median / p95 (µs) | Rust median / p95 (µs) | Median speedup |
 |---:|---:|---:|---:|
-| 20 | 362.6 / 408.1 | 89.4 / 106.0 | **4.06×** |
-| 100 | 1772.7 / 1900.0 | 459.3 / 516.7 | **3.86×** |
-| 400 | 7320.5 / 8370.1 | 1795.4 / 1960.9 | **4.08×** |
+| 20 | 367.6 / 415.0 | 88.8 / 108.7 | **4.14×** |
+| 100 | 1806.9 / 1913.3 | 457.0 / 612.6 | **3.95×** |
+| 400 | 7400.7 / 9113.0 | 1796.5 / 1980.2 | **4.12×** |
 
 Measured on **Apple M4, 32 GB RAM, macOS 26.3 (arm64)** on 2026-09-14, using
 Rust 1.97.1 with the repository's release profile, CPython 3.12.14,
@@ -176,14 +224,16 @@ cargo clippy --all-targets --locked -- -D warnings
 cargo test --release --locked
 ```
 
-Without external data, eight unit tests and two documentation examples run;
-six model tests and two exhaustive Unicode audits are explicitly marked
+Without external data, eleven unit tests and two documentation examples run;
+eleven model tests and two exhaustive Unicode audits are explicitly marked
 **ignored** with setup instructions. The ordinary unit tests include **407**
 committed preprocessing/lowercase/character-type cases and **6,402** Python
 reference cases for candidate-POS set ordering.
 
 To execute the model tests, including **1,713** reference texts with both
-word and POS outputs, pre-segmented POS cases, and 8-thread reentrancy tests:
+word and POS outputs, **1,717** lowercase cases, **196** dictionary cases,
+**40** POS selection cases, **20** pre-segmented casing cases, and 8-thread
+reentrancy tests:
 
 ```sh
 export NAGISA_RS_MODEL_DIR="$PWD/models/nagisa-0.2.11"
@@ -205,10 +255,10 @@ separate preprocessing test. See [fixture provenance](tests/fixtures/README.md).
 
 The current implementation was verified locally with **0 / 1,713 word
 mismatches and 0 / 1,713 POS mismatches**, including both types' 8-thread tests.
-All 18 tests pass locally with the model and exhaustive Unicode audit data enabled.
+All **26 tests** pass locally with the model and exhaustive Unicode audit data enabled.
 
 CI runs on Linux and macOS, downloads the model, verifies the Unicode tables,
-runs the scalar Unicode audit, regenerates word/POS and candidate-feature
+runs the scalar Unicode audit, regenerates word/POS, inference-option and candidate-feature
 Python references, and checks the
 packaged crate. The slower combining-sequence sweep is available locally.
 See [maintenance and Unicode audits](docs/maintenance.md).

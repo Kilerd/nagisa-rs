@@ -51,5 +51,9 @@ jobs:
           python tools/pos_reference.py results/pos
           cmp tests/fixtures/pos_candidates.json results/pos/pos_candidates.json
           cmp tests/fixtures/pos_tokens.json results/pos/pos_tokens.json
+      - name: Verify inference option references
+        run: |
+          python tools/options_reference.py results/options.json
+          cmp tests/fixtures/options.json results/options.json
       - name: Verify distributable crate
         run: cargo package --locked
