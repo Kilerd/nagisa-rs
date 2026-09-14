@@ -3,4 +3,4 @@
 
 /// Versioned, gzip-compressed, lossless little-endian f32 model data.
 /// This storage format is internal to the matching `nagisa-rs` release.
-pub const WEIGHTS_GZIP: &[u8] = include_bytes!("../data/nagisa_v001.bin.gz");
+pub static WEIGHTS_GZIP: &[u8] = include_bytes!("../data/nagisa_v001.bin.gz");
