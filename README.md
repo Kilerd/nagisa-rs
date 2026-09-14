@@ -62,11 +62,11 @@ corpus, not guaranteed for all text or floating-point platforms.
 
 The project is tested with Rust **1.97.1**. Use a recent stable Rust toolchain.
 
-Use the repository as a dependency until the first crates.io release:
+Add ragisa from crates.io:
 
 ```toml
 [dependencies]
-ragisa = { git = "https://github.com/Kilerd/ragisa" }
+ragisa = "0.1.0"
 ```
 
 ```rust
@@ -143,7 +143,7 @@ external loaders are also available with default features enabled.
 
 ```toml
 [dependencies]
-ragisa = { git = "https://github.com/Kilerd/ragisa", default-features = false }
+ragisa = { version = "0.1.0", default-features = false }
 ```
 
 `python3 tools/download_model.py` is an optional maintainer/reference helper
