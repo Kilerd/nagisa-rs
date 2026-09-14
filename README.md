@@ -44,6 +44,9 @@ API compatibility with every nagisa release.
   `nagisa.extract(..., extract_postags=...)`.
 - [x] **Stopword list** — `STOPWORDS` contains all 135 entries from `nagisa.stopwords`,
   in upstream order. Stopword removal is opt-in.
+- [x] **Concurrent inference** — share one immutable `JaSegmenter` or `Tagger`
+  across threads; correctness and batch throughput are checked at 1, 2, 4 and
+  8 threads, including comparison with nagisa on CPython 3.14t.
 - [ ] **Model training** — `nagisa.fit(...)` and training-data workflows.
 - [ ] **Custom trained models and hyperparameters** — custom `vocabs`, `params`
   and `hp` configurations; only the original 0.3.0 architecture is supported.
@@ -304,6 +307,33 @@ pin both workers to an allowed logical CPU. Reports record Linux affinity,
 cgroup v2 CPU/memory limits and CPU accounting before and after the runs.
 The earlier 0.2.11 reports remain in [the benchmark directory](docs/benchmarks/).
 
+### Multithread throughput
+
+The [thread benchmark](docs/thread-benchmarks.md) compares one shared model
+at **1 / 2 / 4 / 8 worker threads** on Apple M4 and AMD EPYC 9V74, for both
+word segmentation and words + POS. It includes nagisa 0.3.0 on CPython 3.12
+and CPython 3.14t, with an explicit GIL-on/off control on the same 3.14t build.
+
+**The nagisa 0.3.0 PyPI extension automatically re-enables the GIL on 3.14t.**
+The no-GIL benchmark therefore explicitly uses `-X gil=0` and verifies the
+actual GIL state before import, after import and after inference. Every
+timed output is checked against the committed reference outside the timer.
+See the linked report for results, raw measurements, charts and reproduction.
+
+Eight-thread median throughput on the 4,000-line mixed corpus:
+
+| CPU | Task | ragisa lines/s | nagisa 3.14t no-GIL lines/s | Rust / Python | ragisa 8 / 1 scaling |
+|---|---|---:|---:|---:|---:|
+| Apple M4 | Words | 19,231 | 8,549 | 2.25× | 4.75× |
+| Apple M4 | Words + POS | 11,812 | 6,722 | 1.76× | 4.72× |
+| AMD EPYC 9V74 | Words | 11,731 | 8,939 | 1.31× | 7.24× |
+| AMD EPYC 9V74 | Words + POS | 7,354 | 5,922 | 1.24× | 7.26× |
+
+These are four-run medians, with 1 / 2 / 4 / 8-thread results and observed
+variation in the full report. M4 has 4 performance and 6 efficiency cores;
+AMD uses eight distinct physical cores. This workload differs from the
+three synthetic inputs in the single-thread latency tables above.
+
 ## Validation
 
 ```sh
@@ -321,7 +351,8 @@ reference cases for candidate-POS set ordering.
 
 The bundled tests cover **1,717** reference texts with both word and POS
 outputs, **1,721** lowercase cases, **196** dictionary cases, **40** POS
-selection cases, **20** pre-segmented casing cases, and 8-thread reentrancy.
+selection cases, **20** pre-segmented casing cases, and shared-model reentrancy
+at 1, 2, 4 and 8 threads.
 To check the original-file loader as well as every bundled weight's f32 bits:
 
 ```sh
@@ -353,7 +384,10 @@ then verifies the original data, all f32 weight bits and the Unicode tables,
 runs the scalar Unicode audit, regenerates word/POS, inference-option and candidate-feature
 Python references, and checks the
 packaged crates. It also checks the external-only build and offline use of
-the distributed packages. The slower combining-sequence sweep is available locally.
+the distributed packages. A separate Linux/macOS job checks the thread benchmark
+with CPython 3.12 and 3.14t, including both explicit GIL states. CI checks output
+parity and the measurement protocol; it does not enforce timing thresholds on
+shared runners. The slower combining-sequence sweep is available locally.
 See [maintenance and Unicode audits](docs/maintenance.md).
 
 ## License and acknowledgements

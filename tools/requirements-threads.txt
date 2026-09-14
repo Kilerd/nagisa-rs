@@ -1,0 +1,4 @@
+# Inference-only dependencies. Install nagisa==0.3.0 separately with --no-deps:
+# its metadata still requires DyNet38 even though inference no longer imports it.
+numpy==2.5.3
+six==1.17.0

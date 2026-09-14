@@ -69,3 +69,40 @@ jobs:
         run: |
           cargo package --workspace --locked
           python tools/check_package.py
+
+  threads:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: actions/setup-python@v5
+        id: python312
+        with:
+          python-version: '3.12.14'
+      - name: Install CPython 3.12 inference reference
+        run: |
+          python -m pip install -r tools/requirements-threads.txt
+          python -m pip install --no-deps nagisa==0.3.0
+      - uses: actions/setup-python@v5
+        id: python314t
+        with:
+          python-version: '3.14.7t'
+      - name: Install free-threaded inference reference
+        run: |
+          python -m pip install -r tools/requirements-threads.txt
+          python -m pip install --no-deps nagisa==0.3.0
+      - name: Verify shared-model output parity and actual GIL state
+        env:
+          PYTHON312: ${{ steps.python312.outputs.python-path }}
+          PYTHON314T: ${{ steps.python314t.outputs.python-path }}
+        run: |
+          python tools/benchmark_threads.py --python312 "$PYTHON312" --python314t "$PYTHON314T" \
+            --lines 64 --runs 1 --warmup 2 --output results/threads-smoke.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: threads-smoke-${{ matrix.os }}
+          path: results/threads-smoke.json

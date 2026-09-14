@@ -121,17 +121,26 @@ fn tagging_is_send_sync_and_reentrant() {
     let cases = cases();
     // Include Unicode, whitespace, mixed-script, and natural text categories.
     let sample: Vec<_> = cases.iter().step_by((cases.len() / 80).max(1)).collect();
-    std::thread::scope(|scope| {
-        for _ in 0..8 {
-            let tagger = &tagger;
-            let sample = &sample;
-            scope.spawn(move || {
-                for case in sample {
-                    let got = tagger.tagging(&case.text);
-                    assert_eq!(got.words, case.words);
-                    assert_eq!(labels(&got.postags), case.postags);
-                }
-            });
-        }
-    });
+    for threads in [1, 2, 4, 8] {
+        let start = std::sync::Barrier::new(threads);
+        std::thread::scope(|scope| {
+            for worker in 0..threads {
+                let (tagger, sample, start) = (&tagger, &sample, &start);
+                scope.spawn(move || {
+                    start.wait();
+                    for i in 0..sample.len() {
+                        // Different callers interleave words/POS on the same loaded model.
+                        let case = sample[(i + worker) % sample.len()];
+                        if (i + worker) % 2 == 0 {
+                            let got = tagger.tagging(&case.text);
+                            assert_eq!(got.words, case.words);
+                            assert_eq!(labels(&got.postags), case.postags);
+                        } else {
+                            assert_eq!(tagger.words(&case.text), case.words);
+                        }
+                    }
+                });
+            }
+        });
+    }
 }
