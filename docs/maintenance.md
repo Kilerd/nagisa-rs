@@ -48,6 +48,11 @@ When making a crates.io release, publish `ragisa-model` first, then
 dependency version in sync when changing model data or storage format.
 Ordinary clients only add the main crate; Cargo installs the data dependency.
 
+The [release workflow](releases.md) validates version tags, runs the reusable
+CI checks, and publishes the crates in dependency order. Manual workflow runs
+perform a dry-run only. That guide covers initial API-token setup and migration
+to Trusted Publishing.
+
 ## Test data configuration
 
 | Variable | Data |

@@ -379,14 +379,14 @@ The current implementation was verified locally with **0 / 1,717 word
 mismatches and 0 / 1,717 POS mismatches**, including both types' 8-thread tests.
 All **32 tests** pass locally with the original model and exhaustive Unicode audit data enabled.
 
-CI runs on Linux and macOS, tests bundled loading before any model download,
-then verifies the original data, all f32 weight bits and the Unicode tables,
-runs the scalar Unicode audit, regenerates word/POS, inference-option and candidate-feature
-Python references, and checks the
-packaged crates. It also checks the external-only build and offline use of
-the distributed packages. The multithread benchmark is run manually with the
-documented Python environments; it has no separate CI job. The slower
-combining-sequence sweep is available locally.
+CI runs bundled tests, external-only tests, original-model/Python parity and
+package checks in parallel on Linux and macOS, with a separate format/lint job.
+Build artifacts, pinned model files, Python dependencies and generated reference
+data are cached; correctness checks still run on cache hits. The multithread
+benchmark is run manually with the documented Python environments. Version
+tags trigger the [crates.io release workflow](docs/releases.md), which runs
+the same checks before publishing. Manual Release runs perform a dry-run only.
+The slower combining-sequence sweep is available locally.
 See [maintenance and Unicode audits](docs/maintenance.md).
 
 ## License and acknowledgements

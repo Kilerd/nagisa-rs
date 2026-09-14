@@ -5,12 +5,59 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+  workflow_call:
 
 permissions:
   contents: read
 
+concurrency:
+  group: checks-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref_type == 'branch' }}
+
 jobs:
+  lint:
+    name: Format and lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: lint
+          components: rustfmt, clippy
+      - name: Rust formatting
+        run: cargo fmt --all -- --check
+      - name: Clippy with bundled data
+        run: cargo clippy --workspace --all-targets --locked -- -D warnings
+      - name: Clippy without bundled data
+        run: cargo clippy --all-targets --locked --no-default-features -- -D warnings
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Release validation tests
+        run: python -m unittest discover -s .github/scripts -p 'test_*.py'
+
   test:
+    name: Tests (${{ matrix.os }}, ${{ matrix.model }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        model: [bundled, external-only]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: test-${{ matrix.model }}
+      - name: Bundled tests without model downloads
+        if: matrix.model == 'bundled'
+        run: cargo test --workspace --release --locked
+      - name: External-only configuration
+        if: matrix.model == 'external-only'
+        run: cargo test --release --locked --no-default-features
+
+  reference:
+    name: Model and Python parity (${{ matrix.os }})
     strategy:
       fail-fast: false
       matrix:
@@ -18,54 +65,95 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
-      - uses: dtolnay/rust-toolchain@1.97.1
+      - uses: ./.github/actions/setup-rust
         with:
-          components: rustfmt, clippy
+          cache-key: reference
       - uses: actions/setup-python@v5
+        id: python
         with:
           python-version: '3.12'
-      - run: cargo fmt --all -- --check
-      - run: cargo clippy --workspace --all-targets --locked -- -D warnings
-      - name: Tests using bundled data (no model download)
-        run: cargo test --workspace --release --locked
-      - name: Check external-only configuration
-        run: |
-          cargo clippy --all-targets --locked --no-default-features -- -D warnings
-          cargo test --release --locked --no-default-features
-      - name: Fetch the original model (no nagisa installation required)
+          cache: pip
+          cache-dependency-path: tools/requirements-reference.txt
+      - name: Cache original model files
+        uses: actions/cache@v4
+        id: model
+        with:
+          path: models/nagisa-0.3.0
+          key: model-v1-${{ hashFiles('tools/download_model.py', 'data/manifest.json') }}
+      - name: Download pinned original model
+        if: steps.model.outputs.cache-hit != 'true'
         run: python tools/download_model.py
-      - name: Verify bundled assets against the pinned original
+      - name: Verify original model and bundled assets
         run: python tools/bundle_model.py --check
-      - name: Check pinned Unicode data
+      - name: Cache Unicode audit references
+        uses: actions/cache@v4
+        id: unicode
+        with:
+          path: results/unicode
+          key: unicode-v1-${{ steps.python.outputs.python-version }}-${{ hashFiles('tools/unicode.py') }}
+      - name: Generate Unicode audit references
+        if: steps.unicode.outputs.cache-hit != 'true'
         run: python tools/unicode.py --check --references results/unicode
-      - name: Test the standalone model and Unicode audit
+      - name: Check current Unicode tables against Python
+        if: steps.unicode.outputs.cache-hit == 'true'
+        run: python tools/unicode.py --check
+      - name: Test original loading, all weight bits and Unicode audit
         env:
           RAGISA_MODEL_DIR: models/nagisa-0.3.0
           RAGISA_UNICODE_REF: results/unicode/singles.tsv
         run: cargo test --release --locked
-      - name: Install the Python reference
+      - name: Install pinned Python reference dependencies
         run: python -m pip install -r tools/requirements-reference.txt
-      - name: Regenerate reference words and POS tags using Python
-        run: python tools/reference.py tests/fixtures/ja_parity_subset.jsonl results/reference.jsonl
-      - name: Test bundled model against the fresh Python reference
+      - name: Cache generated Python references
+        uses: actions/cache@v4
+        id: reference
+        with:
+          path: results/python-reference
+          key: reference-v1-${{ runner.os }}-${{ runner.arch }}-${{ steps.python.outputs.python-version }}-${{ hashFiles('tools/requirements-reference.txt', 'tools/reference.py', 'tools/pos_reference.py', 'tools/options_reference.py', 'tools/compat_reference.py', 'tests/fixtures/**', 'data/manifest.json') }}
+      - name: Generate word and POS reference
+        if: steps.reference.outputs.cache-hit != 'true'
+        run: |
+          mkdir -p results/python-reference
+          python tools/reference.py tests/fixtures/ja_parity_subset.jsonl results/python-reference/words.jsonl
+      - name: Generate candidate features and pre-tokenized POS references
+        if: steps.reference.outputs.cache-hit != 'true'
+        run: python tools/pos_reference.py results/python-reference/pos
+      - name: Generate inference option references
+        if: steps.reference.outputs.cache-hit != 'true'
+        run: python tools/options_reference.py results/python-reference/options.json
+      - name: Generate nagisa 0.3.0 compatibility references
+        if: steps.reference.outputs.cache-hit != 'true'
+        run: python tools/compat_reference.py results/python-reference/compat_030.json
+      - name: Test bundled model against Python reference
         env:
-          RAGISA_FIXTURES: results/reference.jsonl
+          RAGISA_FIXTURES: results/python-reference/words.jsonl
         run: cargo test --release --locked --test parity --test tagging
-      - name: Verify candidate features and pre-tokenized POS references
+      - name: Compare candidate features and pre-tokenized POS
         run: |
-          python tools/pos_reference.py results/pos
-          cmp tests/fixtures/pos_candidates.json results/pos/pos_candidates.json
-          cmp tests/fixtures/pos_tokens.json results/pos/pos_tokens.json
-          cmp tests/fixtures/pos_labels.json results/pos/pos_labels.json
-      - name: Verify inference option references
-        run: |
-          python tools/options_reference.py results/options.json
-          cmp tests/fixtures/options.json results/options.json
-      - name: Verify nagisa 0.3.0 compatibility fixtures
-        run: |
-          python tools/compat_reference.py results/compat_030.json
-          cmp tests/fixtures/compat_030.json results/compat_030.json
-      - name: Verify distributable crates and offline consumer
-        run: |
-          cargo package --workspace --locked
-          python tools/check_package.py
+          cmp tests/fixtures/pos_candidates.json results/python-reference/pos/pos_candidates.json
+          cmp tests/fixtures/pos_tokens.json results/python-reference/pos/pos_tokens.json
+          cmp tests/fixtures/pos_labels.json results/python-reference/pos/pos_labels.json
+      - name: Compare inference options
+        run: cmp tests/fixtures/options.json results/python-reference/options.json
+      - name: Compare nagisa 0.3.0 compatibility
+        run: cmp tests/fixtures/compat_030.json results/python-reference/compat_030.json
+
+  package:
+    name: Crate packaging (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ./.github/actions/setup-rust
+        with:
+          cache-key: package
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Dry-run publishing both crates
+        run: cargo publish --workspace --dry-run --locked
+      - name: Verify package sizes and offline consumer
+        run: python tools/check_package.py
