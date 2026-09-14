@@ -175,57 +175,86 @@ architecture.
 
 ## Performance against Python
 
-### Word segmentation
+Measured on **2026-09-14** with the default bundled model, Rust **1.97.1**
+using the repository's release profile and no extra `RUSTFLAGS`, CPython
+**3.12.14**, nagisa **0.2.11**, DyNet38 **2.2**, and NumPy **2.5.3**.
+Both platforms used identical implementation, benchmark and model hashes.
+Speedup compares Python and Rust on the same CPU.
 
-These figures measure word segmentation via `JaSegmenter::words()`.
-They do not measure `Tagger::tagging()`. The raw report records the source
-hashes of the measured implementation at
-[`ccb6232`](https://github.com/Kilerd/ragisa/commit/ccb6232abebd726b14d2c1edd0eb96c039f3a807),
-before bundled loading was added; model loading is excluded from these timings.
+### Apple M4
 
-| Characters | Python median / p95 (µs) | Rust median / p95 (µs) | Median speedup |
-|---:|---:|---:|---:|
-| 20 | 367.6 / 415.0 | 88.8 / 108.7 | **4.14×** |
-| 100 | 1806.9 / 1913.3 | 457.0 / 612.6 | **3.95×** |
-| 400 | 7400.7 / 9113.0 | 1796.5 / 1980.2 | **4.12×** |
+**32 GB RAM, macOS 26.3 (arm64)**, with default OS scheduling.
 
-Measured on **Apple M4, 32 GB RAM, macOS 26.3 (arm64)** on 2026-09-14, using
-Rust 1.97.1 with the repository's release profile, CPython 3.12.14,
-nagisa 0.2.11, DyNet38 2.2, and NumPy 2.5.3. See the
-[raw samples, inputs, versions, source hashes and model hashes](docs/benchmarks/apple-m4-2026-09-14.json).
+| Task | Characters | Python median / p95 (µs) | Rust median / p95 (µs) | Median speedup |
+|---|---:|---:|---:|---:|
+| Words | 20 | 363.7 / 429.4 | 89.7 / 174.2 | **4.06×** |
+| Words | 100 | 1779.4 / 1937.4 | 455.9 / 522.4 | **3.90×** |
+| Words | 400 | 7272.8 / 8137.9 | 1788.4 / 1920.5 | **4.07×** |
+| Words + POS | 20 | 556.0 / 666.6 | 159.8 / 198.4 | **3.48×** |
+| Words + POS | 100 | 2615.7 / 3023.4 | 755.8 / 862.2 | **3.46×** |
+| Words + POS | 400 | 10619.4 / 12242.8 | 2948.1 / 3213.4 | **3.60×** |
 
-Each row uses exactly the same input and original weights in both engines:
-the sentence `令和6年4月1日から、東京都渋谷区で新しいサービスが始まります。`
-is repeated and truncated to 20, 100, or 400 Unicode characters. Six runs
-alternate Rust/Python and Python/Rust order, with separate processes, 10
-warmup calls and 400 timed calls per length per run (2,400 samples per cell).
-Native thread-count environment variables are set to one. The table reports
-pooled median and p95 latency; speedup is Python median / Rust median.
+Raw inputs, samples, versions and hashes: [words](docs/benchmarks/apple-m4-words-2026-09-14.json), [words + POS](docs/benchmarks/apple-m4-tagging-2026-09-14.json).
 
-Timing covers `nagisa.tagging(text).words` versus `JaSegmenter::words(text)`,
-including preprocessing and token creation. Python's `.words` property
-lazily performs segmentation; neither side computes POS tags. Model loading,
-process startup, JSON I/O, and destruction of the returned token list are
-outside the timed region. Both sides' tokens must match before a result is
-reported. The raw `load_ms` fields measure different initialization paths
-(Python import/initialization versus Rust segmentation-model loading), so they
-are not presented as a startup-speed comparison.
+### AMD EPYC 9V74
 
-These are warmed, single-thread microbenchmarks on three synthetic inputs,
-not an application-throughput or GPU benchmark. Input mix, CPU and build
-settings affect results.
+**Linux 6.8.0 (x86_64)**, in a container limited to **4 vCPU / 8 GiB**.
+Both workers were pinned to logical CPU 16 on a shared host. No CPU quota
+throttling occurred during either measurement (both `nr_throttled` and
+`throttled_usec` deltas were zero). Affinity does not reserve a core.
 
-Reproduce the comparison with a CPython 3.12 environment:
+| Task | Characters | Python median / p95 (µs) | Rust median / p95 (µs) | Median speedup |
+|---|---:|---:|---:|---:|
+| Words | 20 | 1125.9 / 1157.9 | 231.6 / 238.9 | **4.86×** |
+| Words | 100 | 5504.1 / 5579.6 | 1171.1 / 1192.9 | **4.70×** |
+| Words | 400 | 22072.5 / 23339.1 | 4688.9 / 4756.2 | **4.71×** |
+| Words + POS | 20 | 1576.9 / 1609.1 | 404.4 / 412.5 | **3.90×** |
+| Words + POS | 100 | 7489.7 / 7589.8 | 1962.6 / 1989.5 | **3.82×** |
+| Words + POS | 400 | 29779.1 / 30108.5 | 7748.4 / 7801.5 | **3.84×** |
+
+Raw inputs, samples, versions and hashes: [words](docs/benchmarks/amd-epyc-9v74-words-2026-09-14.json), [words + POS](docs/benchmarks/amd-epyc-9v74-tagging-2026-09-14.json).
+
+### Method and reproduction
+
+Each row uses the sentence
+`令和6年4月1日から、東京都渋谷区で新しいサービスが始まります。`,
+repeated and truncated to 20, 100, or 400 Unicode characters. Each task has
+six runs alternating Rust/Python and Python/Rust order, using separate
+processes, 10 warmup calls and 400 timed calls per length per run
+(**2,400 samples per cell**). Native thread-count environment variables are
+set to one. Tables report pooled median and p95 latency; speedup is Python
+median / Rust median. All compared word and POS outputs matched.
+
+Word segmentation times `JaSegmenter::words(text)` against
+`nagisa.tagging(text).words`. Python's `.words` property lazily performs
+segmentation, so neither side computes POS tags in this mode. Words + POS
+times `Tagger::tagging(text)` against creating a fresh `nagisa.tagging(text)`
+result and reading **both** `.words` and `.postags`.
+
+Timings include preprocessing and output construction, but exclude model
+loading, process startup, JSON I/O and destruction of the returned results.
+Rust initializes from the bundled dictionary and lossless f32 weights;
+Python uses its package's original model. The raw `load_ms` fields cover
+different initialization paths and are not a startup-speed comparison.
+
+These are warmed, single-thread CPU microbenchmarks on three synthetic
+inputs. Input mix, CPU scheduling, host contention and build settings affect
+results; they do not measure application throughput or GPU performance.
+
+Reproduce with a CPython 3.12 environment:
 
 ```sh
 uv venv --python 3.12 .venv
 uv pip install --python .venv/bin/python -r tools/requirements-reference.txt
-.venv/bin/python tools/benchmark.py --output results/benchmark.json
+.venv/bin/python tools/benchmark.py --mode words --output results/words.json
+.venv/bin/python tools/benchmark.py --mode tagging --output results/tagging.json
 ```
 
-`uv` is optional; a regular Python 3.12 `venv` and `pip` work too. The benchmark
-builds the Rust example in release mode and uses the Python package's own
-model directory for both engines.
+`uv` is optional; a regular Python 3.12 `venv` and `pip` work too. The tool
+builds the Rust worker in release mode. Add `--external-model` to use the
+Python package's original model files, or `--cpu N` on Linux to
+pin both workers to an allowed logical CPU. Reports record Linux affinity,
+cgroup v2 CPU/memory limits and CPU accounting before and after the runs.
 
 ## Validation
 

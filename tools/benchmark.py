@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Measure identical word segmentation calls in separate Rust and Python processes."""
+"""Compare word segmentation or full POS tagging in separate Rust/Python processes."""
 import argparse
 import hashlib
 import importlib.metadata
@@ -27,18 +27,27 @@ def python_worker():
     start = time.perf_counter_ns()
     import nagisa
     load_ms = (time.perf_counter_ns() - start) / 1e6
+    tagging = request["mode"] == "tagging"
     measurements = []
     for text in request["texts"]:
         for _ in range(request["warmup"]):
-            nagisa.tagging(text).words
+            tagged = nagisa.tagging(text)
+            tagged.words
+            if tagging:
+                tagged.postags
+            del tagged
         samples = []
         for _ in range(request["iterations"]):
             start = time.perf_counter_ns()
-            words = nagisa.tagging(text).words
+            tagged = nagisa.tagging(text)
+            words = tagged.words
+            postags = tagged.postags if tagging else []
             elapsed = time.perf_counter_ns() - start
             samples.append(elapsed / 1e3)
-            del words
-        measurements.append({"text": text, "words": nagisa.tagging(text).words,
+            del tagged, words, postags
+        tagged = nagisa.tagging(text)
+        measurements.append({"text": text, "words": tagged.words,
+                             "postags": tagged.postags if tagging else [],
                              "samples_us": samples})
     json.dump({"load_ms": load_ms, "measurements": measurements}, sys.stdout, ensure_ascii=False)
 
@@ -54,12 +63,49 @@ def positive(value):
     return result
 
 
+def cpu_name():
+    if sys.platform == "darwin":
+        return command("sysctl", "-n", "machdep.cpu.brand_string")
+    cpuinfo = Path("/proc/cpuinfo")
+    if cpuinfo.exists():
+        for line in cpuinfo.read_text().splitlines():
+            key, sep, value = line.partition(":")
+            if sep and key.strip() == "model name":
+                return value.strip()
+    return platform.processor()
+
+
+def cpu_resources():
+    """Record CPU constraints without hostnames, addresses or cluster metadata."""
+    result = {"logical_cpus": os.cpu_count()}
+    if hasattr(os, "sched_getaffinity"):
+        result["affinity"] = sorted(os.sched_getaffinity(0))
+    cgroup = Path("/sys/fs/cgroup")
+    for name in ("cpu.max", "cpuset.cpus.effective", "memory.max"):
+        path = cgroup / name
+        if path.exists():
+            result[name] = path.read_text().strip()
+    return result
+
+
+def cpu_accounting():
+    path = Path("/sys/fs/cgroup/cpu.stat")
+    if path.exists():
+        return {key: int(value) for key, value in
+                (line.split() for line in path.read_text().splitlines())}
+    return None
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=ROOT / "results/benchmark.json")
     parser.add_argument("--runs", type=positive, default=6)
     parser.add_argument("--warmup", type=positive, default=10)
     parser.add_argument("--iterations", type=positive, default=400)
+    parser.add_argument("--mode", choices=("words", "tagging"), default="words")
+    parser.add_argument("--cpu", type=int, help="pin workers to this Linux logical CPU")
+    parser.add_argument("--external-model", action="store_true",
+                        help="load the Python package's original model instead of bundled data")
     args = parser.parse_args()
     if (sys.implementation.name, sys.version_info[:2], unicodedata.unidata_version) != (
         "cpython", (3, 12), "15.0.0"
@@ -76,24 +122,31 @@ def main():
     binary = Path(metadata["target_directory"]) / "release/examples/bench"
     if os.name == "nt":
         binary = binary.with_suffix(".exe")
+    if args.cpu is not None:
+        if not hasattr(os, "sched_getaffinity") or args.cpu not in os.sched_getaffinity(0):
+            raise SystemExit("--cpu must be an allowed Linux logical CPU")
+        # Set affinity after building; worker processes inherit it, including model allocation.
+        os.sched_setaffinity(0, {args.cpu})
     base = "令和6年4月1日から、東京都渋谷区で新しいサービスが始まります。"
-    request = {"warmup": args.warmup, "iterations": args.iterations,
+    request = {"mode": args.mode, "warmup": args.warmup, "iterations": args.iterations,
                "texts": [(base * (length // len(base) + 1))[:length] for length in (20, 100, 400)]}
     runs = []
+    accounting_before = cpu_accounting()
     for run in range(args.runs):
         order = ["rust", "python"] if run % 2 == 0 else ["python", "rust"]
         result = {"order": order}
         for engine in order:
-            argv = [str(binary), str(model_dir)] if engine == "rust" else [
+            argv = [str(binary)] + ([str(model_dir)] if args.external_model else []) if engine == "rust" else [
                 sys.executable, str(Path(__file__).resolve()), "--python-worker"]
             completed = subprocess.run(argv, input=json.dumps(request), capture_output=True,
                                        text=True, env=env, cwd=ROOT, check=True)
             result[engine] = json.loads(completed.stdout)
-        for rust, python in zip(result["rust"]["measurements"], result["python"]["measurements"]):
-            if (rust["text"], rust["words"]) != (python["text"], python["words"]):
-                raise SystemExit("word parity failed; benchmark is not comparable")
+        for rust, python in zip(result["rust"]["measurements"], result["python"]["measurements"], strict=True):
+            if any(rust[key] != python[key] for key in ("text", "words", "postags")):
+                raise SystemExit("word/POS parity failed; benchmark is not comparable")
         runs.append(result)
         print(f"completed run {run + 1}/{args.runs}: {' → '.join(order)}", file=sys.stderr)
+    accounting_after = cpu_accounting()
     summary = []
     for index, text in enumerate(request["texts"]):
         row = {"chars": len(text)}
@@ -105,18 +158,23 @@ def main():
                            "run_medians_us": medians}
         row["speedup"] = row["python"]["median_us"] / row["rust"]["median_us"]
         summary.append(row)
-    files = [ROOT / "Cargo.toml", ROOT / "Cargo.lock"]
-    for folder, pattern in (("src", "*.rs"), ("examples", "*.rs"), ("tools", "*.py")):
+    files = [ROOT / name for name in ("Cargo.toml", "Cargo.lock", "build.rs", "model/Cargo.toml")]
+    for folder, pattern in (("src", "*.rs"), ("model/src", "*.rs"), ("examples", "*.rs"), ("tools", "*.py")):
         files.extend(sorted((ROOT / folder).glob(pattern)))
-    cpu = command("sysctl", "-n", "machdep.cpu.brand_string") if sys.platform == "darwin" else platform.processor()
-    report = {"measured_at": datetime.now(timezone.utc).isoformat(),
-              "environment": {"platform": platform.platform(), "cpu": cpu,
+    report = {"schema_version": 2, "measured_at": datetime.now(timezone.utc).isoformat(),
+              "rust_model": "external" if args.external_model else "bundled",
+              "environment": {"platform": platform.platform(), "cpu": cpu_name(),
+                              "cpu_resources": cpu_resources(),
+                              "cpu_accounting_before": accounting_before,
+                              "cpu_accounting_after": accounting_after,
                               "python": sys.version, "unicode": unicodedata.unidata_version,
                               "rustc": command("rustc", "--version"),
                               "packages": {name: importlib.metadata.version(name) for name in
                                            ("nagisa", "DyNet38", "numpy", "Cython", "six")},
                               "thread_env": THREAD_ENV, "rustflags": os.environ.get("RUSTFLAGS", "")},
               "source_sha256": {str(p.relative_to(ROOT)): hashlib.sha256(p.read_bytes()).hexdigest() for p in files},
+              "bundled_sha256": {name: hashlib.sha256((ROOT / name).read_bytes()).hexdigest()
+                                 for name in ("data/nagisa_v001.dict", "model/data/nagisa_v001.bin.gz")},
               "model_sha256": {p.name: hashlib.sha256(p.read_bytes()).hexdigest() for p in sorted(model_dir.glob("nagisa_v001.*"))},
               "request": request, "summary": summary, "runs": runs}
     args.output.parent.mkdir(parents=True, exist_ok=True)

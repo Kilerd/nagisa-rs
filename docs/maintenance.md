@@ -167,15 +167,33 @@ regenerates all expected outputs from the pinned Python reference in CI.
 ## Benchmark maintenance
 
 Run `tools/benchmark.py` with the pinned reference requirements. It builds
-`examples/bench.rs`, checks token equality, records individual timings and
+`examples/bench.rs`, checks word/POS equality, records individual timings and
 source/model SHA-256 hashes, and prints a Markdown table. Keep benchmarks
 separate from builds and tests to avoid competing CPU load. Commit a dated
 report under `docs/benchmarks/` when updating README figures, and include
 hardware, versions, inputs, warmup, repetitions and exclusions.
 
-The committed benchmark and current benchmark tool measure word segmentation
-only. Loading and inference have different scopes. Python loads the full
-upstream package/model, while the benchmark's Rust `JaSegmenter` loads only
-segmentation parameters. `Tagger` also loads POS data. Do not compare
-those load times as if they measured identical operations. Segmentation
-microbenchmarks do not measure application throughput.
+Use `--mode words` for `JaSegmenter::words()` and `--mode tagging` for
+`Tagger::tagging()`. The Python worker reads `.words` in both modes and also
+reads the lazy `.postags` property in tagging mode. Each timed call creates a
+fresh result; preprocessing and output construction are included. Model
+loading, startup, I/O and returned-result destruction are excluded.
+
+Rust loads the bundled model by default. `--external-model` selects the
+Python package's original files instead. Reports include hashes of both
+model formats, the benchmark driver, worker, implementation and Cargo files.
+Compare those hashes when measuring the same implementation on another CPU.
+
+On Linux, `--cpu N` pins the driver and both workers to an allowed logical CPU
+after compilation, before loading the models. Reports record affinity,
+cgroup v2 CPU/memory constraints and CPU accounting before/after the runs.
+Check the change in `nr_throttled` and `throttled_usec` before interpreting
+container results. Affinity does not reserve a physical core; shared-host
+contention can still affect timing. Keep infrastructure identifiers out of
+public reports.
+
+Loading and inference have different scopes. Python imports the full
+upstream package/model; Rust initializes a `JaSegmenter` or `Tagger` from
+bundled data. Do not compare their `load_ms` as if they measured identical
+operations. These synthetic microbenchmarks do not measure application
+throughput.
